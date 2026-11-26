@@ -204,6 +204,7 @@
     "min": 6985440000,
     "over": 248266667,
     "target": 7761600000,
+    "under": 0,
     "within": false
   },
   "not_applied": [
@@ -212,9 +213,7 @@
     "ov1",
     "ov2",
     "r:1",
-    "pause.stretch",
-    "visual.cut_points",
-    "intent.stretch"
+    "visual.cut_points"
   ],
   "project_solver": "0.0.1",
   "sections": {
@@ -248,7 +247,7 @@
       "start": 1709120000
     }
   },
-  "solver": "zone-2",
+  "solver": "zone-3",
   "status": "conflict",
   "total": 8786026667,
   "tts_resynth_needed": [

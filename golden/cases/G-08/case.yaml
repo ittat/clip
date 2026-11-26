@@ -1,0 +1,14 @@
+id: G-08
+title: 同 G-07，但没有全局余量：超出 L4 上限，上报
+kind: compile
+fixture: min_explainer
+expect_status: conflict
+expect_nonzero_costs: [intent, declared_budget]
+# 预算同 G-07；L4 收紧到 8s ±10%（7.2–8.8s）。S2 区内消化后全片约 9.5s，
+# 再用 S1 的停顿和语速也压不到 8.8s：剩余部分记为第 3 项
+overlay:
+  structure.yaml:
+    sections:
+      S2: {budget: 6s}
+  intent.yaml:
+    duration: {target: 8s, tol: 10%}

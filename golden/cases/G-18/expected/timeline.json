@@ -1,0 +1,88 @@
+{
+  "duration": 8326080000,
+  "format": 1,
+  "fps": {
+    "den": 1,
+    "num": 25
+  },
+  "solver": "zone-3",
+  "tracks": {
+    "A1": [
+      {
+        "id": "S1.b1/voice",
+        "origin": "S1.b1",
+        "rec_in": 0,
+        "rec_out": 1693440000,
+        "speed_ppm": 1000000,
+        "src": "gen/n_S1.1.wav",
+        "src_in": 0,
+        "src_out": 1693440000
+      },
+      {
+        "id": "S2.b1/voice",
+        "origin": "S2.b1",
+        "rec_in": 2257920000,
+        "rec_out": 4798080000,
+        "speed_ppm": 1000000,
+        "src": "gen/n_S2.1.wav",
+        "src_in": 0,
+        "src_out": 2540160000
+      },
+      {
+        "id": "S2.b2/voice",
+        "origin": "S2.b2",
+        "rec_in": 5362560000,
+        "rec_out": 7620480000,
+        "speed_ppm": 1000000,
+        "src": "gen/n_S2.2.wav",
+        "src_in": 0,
+        "src_out": 2257920000
+      }
+    ],
+    "V1": [
+      {
+        "id": "S1.b1/visual[0]",
+        "origin": "S1.b1",
+        "rec_in": 0,
+        "rec_out": 2257920000,
+        "speed_ppm": 1000000,
+        "src": "media/a.mp4",
+        "src_in": 0,
+        "src_out": 2257920000
+      },
+      {
+        "id": "S2.b1/visual[0]",
+        "origin": "S2.b1",
+        "rec_in": 2257920000,
+        "rec_out": 5362560000,
+        "speed_ppm": 1000000,
+        "src": "media/a.mp4",
+        "src_in": 14112000000,
+        "src_out": 17216640000
+      }
+    ],
+    "V2": [
+      {
+        "id": "S2.b1/visual[1]",
+        "origin": "S2.b1",
+        "rec_in": 3217536000,
+        "rec_out": 5334336000,
+        "speed_ppm": 833333,
+        "src": "media/b.mp4",
+        "src_in": 2116800000,
+        "src_out": 3880800000
+      },
+      {
+        "id": "S2.b2/visual[0]",
+        "origin": "S2.b2",
+        "rec_in": 5362560000,
+        "rec_out": 8326080000,
+        "speed_ppm": 1000000,
+        "src": "media/b.mp4",
+        "src_in": 8467200000,
+        "src_out": 11430720000
+      }
+    ]
+  },
+  "unit": "flicks"
+}

@@ -12,7 +12,7 @@
 | `locality` | 对比 overlay 前后，按区统计变化（段落整体平移不算），不超过 `max_changed_zones` |
 
 用例可以写 `overlay` 在样例工程上叠加修改（JSON merge-patch：映射递归合并，列表和标量整体替换，`null` 删除键），不用复制整个工程。
-`compile` 用例还可以写 `expect_status` 和 `forbid_option_targets`（冲突选项里不能出现的目标）。
+`compile` 用例还可以写 `expect_status`、`forbid_option_targets`（冲突选项里不能出现的目标）、`expect_zero_costs` / `expect_nonzero_costs`（代价项必须为 0 / 大于 0）。
 
 更新期望输出：
 

@@ -1,0 +1,224 @@
+{
+  "beats": {
+    "S1.b1": {
+      "body": 1693440000,
+      "cost": {
+        "pause": 282240000
+      },
+      "dur": 2257920000,
+      "offset": 0,
+      "pause": 564480000,
+      "reasons": [
+        "停顿拉长 0.4s：0.4s → 0.8s"
+      ],
+      "visuals": [
+        {
+          "fill": "cut",
+          "index": 0,
+          "missing": 0,
+          "offset": 0,
+          "rec_len": 2257920000,
+          "src_len": 2257920000
+        }
+      ],
+      "voice": {
+        "len": 1693440000,
+        "natural": 1693440000,
+        "speed_ppm": 1000000
+      }
+    },
+    "S2.b1": {
+      "body": 2540160000,
+      "cost": {
+        "pause": 282240000,
+        "trim": 352800000
+      },
+      "dur": 3104640000,
+      "offset": 0,
+      "pause": 564480000,
+      "reasons": [
+        "停顿拉长 0.4s：0.4s → 0.8s",
+        "visual[1] shot:B.2 慢放到上限 20% 仍缺 0.04s"
+      ],
+      "visuals": [
+        {
+          "fill": "cut",
+          "index": 0,
+          "missing": 0,
+          "offset": 0,
+          "rec_len": 3104640000,
+          "src_len": 3104640000
+        },
+        {
+          "fill": "short",
+          "index": 1,
+          "missing": 28224000,
+          "offset": 959616000,
+          "rec_len": 2116800000,
+          "src_len": 1764000000
+        }
+      ],
+      "voice": {
+        "len": 2540160000,
+        "natural": 2540160000,
+        "speed_ppm": 1000000
+      }
+    },
+    "S2.b2": {
+      "body": 2257920000,
+      "cost": {
+        "pause": 282240000
+      },
+      "dur": 2963520000,
+      "offset": 3104640000,
+      "pause": 705600000,
+      "reasons": [
+        "停顿拉长 0.4s：0.6s → 1s"
+      ],
+      "visuals": [
+        {
+          "fill": "cut",
+          "index": 0,
+          "missing": 0,
+          "offset": 0,
+          "rec_len": 2963520000,
+          "src_len": 2963520000
+        }
+      ],
+      "voice": {
+        "len": 2257920000,
+        "natural": 2257920000,
+        "speed_ppm": 1000000
+      }
+    }
+  },
+  "conflicts": [
+    {
+      "code": "intent_under",
+      "max_total": 8326080000,
+      "note": "语速不放慢；停顿和画面已拉到上限",
+      "options": [
+        {
+          "amount": 1058400000,
+          "id": "A",
+          "op": "add",
+          "target": "content",
+          "term": "meaning"
+        },
+        {
+          "amount": 1058400000,
+          "id": "B",
+          "op": "relax",
+          "target": "intent.duration",
+          "term": "intent"
+        }
+      ],
+      "recommend": "A",
+      "term": "intent",
+      "under": 1058400000
+    }
+  ],
+  "cost": [
+    [
+      "hard",
+      0
+    ],
+    [
+      "human_lock",
+      0
+    ],
+    [
+      "intent",
+      1058400000
+    ],
+    [
+      "meaning",
+      0
+    ],
+    [
+      "declared_budget",
+      423360000
+    ],
+    [
+      "cross_zone",
+      2
+    ],
+    [
+      "rate",
+      0
+    ],
+    [
+      "trim",
+      352800000
+    ],
+    [
+      "pause",
+      846720000
+    ],
+    [
+      "diff_from_prev",
+      0
+    ]
+  ],
+  "format": 1,
+  "intent": {
+    "max": 10372320000,
+    "min": 9384480000,
+    "over": 0,
+    "target": 9878400000,
+    "under": 1058400000,
+    "within": false
+  },
+  "not_applied": [
+    "music:S2.b1",
+    "music:S2.b2",
+    "ov1",
+    "ov2",
+    "r:1",
+    "visual.cut_points"
+  ],
+  "project_solver": "0.0.1",
+  "sections": {
+    "S1": {
+      "beats": [
+        "S1.b1"
+      ],
+      "borrowed": [],
+      "budget": null,
+      "budget_kind": "derived",
+      "dur": 2257920000,
+      "l4_absorbed": true,
+      "lent": [],
+      "natural": 1975680000,
+      "over": null,
+      "start": 0
+    },
+    "S2": {
+      "beats": [
+        "S2.b1",
+        "S2.b2"
+      ],
+      "borrowed": [],
+      "budget": 5644800000,
+      "budget_kind": "declared",
+      "dur": 6068160000,
+      "l4_absorbed": true,
+      "lent": [],
+      "natural": 5503680000,
+      "over": 423360000,
+      "start": 2257920000
+    }
+  },
+  "solver": "zone-3",
+  "status": "conflict",
+  "total": 8326080000,
+  "tts_resynth_needed": [],
+  "warnings": [
+    {
+      "beat": "S2.b1",
+      "code": "visual_shortfall",
+      "missing": 28224000,
+      "shot": "shot:B.2"
+    }
+  ]
+}

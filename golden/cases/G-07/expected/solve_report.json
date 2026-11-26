@@ -1,0 +1,199 @@
+{
+  "beats": {
+    "S1.b1": {
+      "body": 1693440000,
+      "cost": {},
+      "dur": 1975680000,
+      "offset": 0,
+      "pause": 282240000,
+      "reasons": [],
+      "visuals": [
+        {
+          "fill": "cut",
+          "index": 0,
+          "missing": 0,
+          "offset": 0,
+          "rec_len": 1975680000,
+          "src_len": 1975680000
+        }
+      ],
+      "voice": {
+        "len": 1693440000,
+        "natural": 1693440000,
+        "speed_ppm": 1000000
+      }
+    },
+    "S2.b1": {
+      "body": 2352000000,
+      "cost": {
+        "pause": 141120000,
+        "rate": 80000
+      },
+      "dur": 2493120000,
+      "offset": 0,
+      "pause": 141120000,
+      "reasons": [
+        "停顿压缩 0.2s：0.4s → 0.2s",
+        "语速 +8.0%：旁白 3.6s → 3.333s（需要重新合成 TTS）"
+      ],
+      "visuals": [
+        {
+          "fill": "cut",
+          "index": 0,
+          "missing": 0,
+          "offset": 0,
+          "rec_len": 2493120000,
+          "src_len": 2493120000
+        },
+        {
+          "fill": "cut",
+          "index": 1,
+          "missing": 0,
+          "offset": 888533333,
+          "rec_len": 1604586667,
+          "src_len": 1604586667
+        }
+      ],
+      "voice": {
+        "len": 2352000000,
+        "natural": 2540160000,
+        "speed_ppm": 1080000
+      }
+    },
+    "S2.b2": {
+      "body": 2090666667,
+      "cost": {
+        "pause": 282240000,
+        "rate": 80000
+      },
+      "dur": 2231786667,
+      "offset": 2493120000,
+      "pause": 141120000,
+      "reasons": [
+        "停顿压缩 0.4s：0.6s → 0.2s",
+        "语速 +8.0%：旁白 3.2s → 2.963s（需要重新合成 TTS）"
+      ],
+      "visuals": [
+        {
+          "fill": "cut",
+          "index": 0,
+          "missing": 0,
+          "offset": 0,
+          "rec_len": 2231786667,
+          "src_len": 2231786667
+        }
+      ],
+      "voice": {
+        "len": 2090666667,
+        "natural": 2257920000,
+        "speed_ppm": 1080000
+      }
+    }
+  },
+  "conflicts": [],
+  "cost": [
+    [
+      "hard",
+      0
+    ],
+    [
+      "human_lock",
+      0
+    ],
+    [
+      "intent",
+      0
+    ],
+    [
+      "meaning",
+      0
+    ],
+    [
+      "declared_budget",
+      491306667
+    ],
+    [
+      "cross_zone",
+      0
+    ],
+    [
+      "rate",
+      160000
+    ],
+    [
+      "trim",
+      0
+    ],
+    [
+      "pause",
+      423360000
+    ],
+    [
+      "diff_from_prev",
+      0
+    ]
+  ],
+  "format": 1,
+  "intent": {
+    "max": 7761600000,
+    "min": 6350400000,
+    "over": 0,
+    "target": 7056000000,
+    "under": 0,
+    "within": true
+  },
+  "not_applied": [
+    "music:S2.b1",
+    "music:S2.b2",
+    "ov1",
+    "ov2",
+    "r:1",
+    "visual.cut_points"
+  ],
+  "project_solver": "0.0.1",
+  "sections": {
+    "S1": {
+      "beats": [
+        "S1.b1"
+      ],
+      "borrowed": [],
+      "budget": null,
+      "budget_kind": "derived",
+      "dur": 1975680000,
+      "l4_absorbed": false,
+      "lent": [],
+      "natural": 1975680000,
+      "over": null,
+      "start": 0
+    },
+    "S2": {
+      "beats": [
+        "S2.b1",
+        "S2.b2"
+      ],
+      "borrowed": [],
+      "budget": 4233600000,
+      "budget_kind": "declared",
+      "dur": 4724906667,
+      "l4_absorbed": false,
+      "lent": [],
+      "natural": 5503680000,
+      "over": 491306667,
+      "start": 1975680000
+    }
+  },
+  "solver": "zone-3",
+  "status": "ok",
+  "total": 6700586667,
+  "tts_resynth_needed": [
+    {
+      "narration": "n:S2.1",
+      "speed_ppm": 1080000
+    },
+    {
+      "narration": "n:S2.2",
+      "speed_ppm": 1080000
+    }
+  ],
+  "warnings": []
+}

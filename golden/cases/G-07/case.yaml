@@ -1,0 +1,15 @@
+id: G-07
+title: S2 超出声明预算，有全局余量：不删内容，只计第 5 项
+kind: compile
+fixture: min_explainer
+expect_status: ok
+expect_nonzero_costs: [declared_budget]
+expect_zero_costs: [intent, meaning, human_lock]
+# S2 自然 7.8s，预算改为 6s（超 1.8s）；L4 放宽到 10s ±10%（9–11s）。
+# 区内用尽停顿和语速后仍超约 0.7s：记为偏离声明预算，不上报
+overlay:
+  structure.yaml:
+    sections:
+      S2: {budget: 6s}
+  intent.yaml:
+    duration: {target: 10s, tol: 10%}
