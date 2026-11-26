@@ -86,6 +86,8 @@ pub struct Visual {
     pub fit: Fit,
     /// 从本节拍旁白的第几个词开始
     pub from: Option<WordRef>,
+    /// `fit: fixed` 的固定长度（人工锁定）
+    pub len: Option<Tick>,
 }
 
 #[derive(Clone, Debug)]

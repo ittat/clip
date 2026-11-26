@@ -1,0 +1,264 @@
+{
+  "beats": {
+    "S1.b1": {
+      "body": 1568000000,
+      "cost": {
+        "pause": 141120000,
+        "rate": 80000
+      },
+      "dur": 1709120000,
+      "offset": 0,
+      "pause": 141120000,
+      "reasons": [
+        "停顿压缩 0.2s：0.4s → 0.2s",
+        "语速 +8.0%：旁白 2.4s → 2.222s（需要重新合成 TTS）"
+      ],
+      "visuals": [
+        {
+          "fill": "cut",
+          "index": 0,
+          "missing": 0,
+          "offset": 0,
+          "rec_len": 1709120000,
+          "src_len": 1709120000
+        }
+      ],
+      "voice": {
+        "len": 1568000000,
+        "natural": 1693440000,
+        "speed_ppm": 1080000
+      }
+    },
+    "S2.b1": {
+      "body": 2352000000,
+      "cost": {
+        "pause": 141120000,
+        "rate": 80000
+      },
+      "dur": 2493120000,
+      "offset": 0,
+      "pause": 141120000,
+      "reasons": [
+        "停顿压缩 0.2s：0.4s → 0.2s",
+        "语速 +8.0%：旁白 3.6s → 3.333s（需要重新合成 TTS）"
+      ],
+      "visuals": [
+        {
+          "fill": "cut",
+          "index": 0,
+          "missing": 0,
+          "offset": 0,
+          "rec_len": 2493120000,
+          "src_len": 2493120000
+        },
+        {
+          "fill": "cut",
+          "index": 1,
+          "missing": 0,
+          "offset": 888533333,
+          "rec_len": 1604586667,
+          "src_len": 1604586667
+        }
+      ],
+      "voice": {
+        "len": 2352000000,
+        "natural": 2540160000,
+        "speed_ppm": 1080000
+      }
+    },
+    "S2.b2": {
+      "body": 4233600000,
+      "cost": {
+        "pause": 282240000
+      },
+      "dur": 4374720000,
+      "offset": 2493120000,
+      "pause": 141120000,
+      "reasons": [
+        "停顿压缩 0.4s：0.6s → 0.2s"
+      ],
+      "visuals": [
+        {
+          "fill": "fixed",
+          "index": 0,
+          "missing": 0,
+          "offset": 0,
+          "rec_len": 4233600000,
+          "src_len": 4233600000
+        }
+      ],
+      "voice": {
+        "len": 2257920000,
+        "natural": 2257920000,
+        "speed_ppm": 1000000
+      }
+    }
+  },
+  "conflicts": [
+    {
+      "code": "intent_over",
+      "min_conflict_set": [
+        {
+          "target": "intent.duration.max",
+          "value": 8537760000
+        },
+        {
+          "min": 4233600000,
+          "target": "S2.b2.visual[0]"
+        },
+        {
+          "min": 2352000000,
+          "target": "n:S2.1"
+        },
+        {
+          "min": 1568000000,
+          "target": "n:S1.1"
+        },
+        {
+          "min": 141120000,
+          "target": "S1.b1.pause"
+        },
+        {
+          "min": 141120000,
+          "target": "S2.b1.pause"
+        },
+        {
+          "min": 141120000,
+          "target": "S2.b2.pause"
+        }
+      ],
+      "options": [
+        {
+          "amount": 862400000,
+          "id": "A",
+          "op": "remove",
+          "target": "n:S1.1",
+          "term": "meaning"
+        },
+        {
+          "amount": 39200000,
+          "id": "B",
+          "op": "relax",
+          "target": "intent.duration",
+          "term": "intent"
+        },
+        {
+          "amount": 2142933333,
+          "id": "C",
+          "op": "unlock",
+          "target": "S2.b2.visual[0]",
+          "term": "human_lock"
+        }
+      ],
+      "over": 39200000,
+      "recommend": "A",
+      "term": "intent"
+    }
+  ],
+  "cost": [
+    [
+      "hard",
+      0
+    ],
+    [
+      "human_lock",
+      0
+    ],
+    [
+      "intent",
+      39200000
+    ],
+    [
+      "meaning",
+      0
+    ],
+    [
+      "declared_budget",
+      1223040000
+    ],
+    [
+      "cross_zone",
+      1
+    ],
+    [
+      "rate",
+      160000
+    ],
+    [
+      "trim",
+      0
+    ],
+    [
+      "pause",
+      564480000
+    ],
+    [
+      "diff_from_prev",
+      0
+    ]
+  ],
+  "format": 1,
+  "intent": {
+    "max": 8537760000,
+    "min": 6985440000,
+    "over": 39200000,
+    "target": 7761600000,
+    "within": false
+  },
+  "not_applied": [
+    "music:S2.b1",
+    "music:S2.b2",
+    "ov1",
+    "ov2",
+    "r:1",
+    "pause.stretch",
+    "visual.cut_points",
+    "intent.stretch"
+  ],
+  "project_solver": "0.0.1",
+  "sections": {
+    "S1": {
+      "beats": [
+        "S1.b1"
+      ],
+      "borrowed": [],
+      "budget": null,
+      "budget_kind": "derived",
+      "dur": 1709120000,
+      "l4_absorbed": true,
+      "lent": [],
+      "natural": 1975680000,
+      "over": null,
+      "start": 0
+    },
+    "S2": {
+      "beats": [
+        "S2.b1",
+        "S2.b2"
+      ],
+      "borrowed": [],
+      "budget": 5644800000,
+      "budget_kind": "declared",
+      "dur": 6867840000,
+      "l4_absorbed": false,
+      "lent": [],
+      "natural": 7479360000,
+      "over": 1223040000,
+      "start": 1709120000
+    }
+  },
+  "solver": "zone-2",
+  "status": "conflict",
+  "total": 8576960000,
+  "tts_resynth_needed": [
+    {
+      "narration": "n:S1.1",
+      "speed_ppm": 1080000
+    },
+    {
+      "narration": "n:S2.1",
+      "speed_ppm": 1080000
+    }
+  ],
+  "warnings": []
+}

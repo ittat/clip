@@ -1,19 +1,22 @@
 //! 黄金用例运行器。
 //!
 //! 目录结构：`golden/fixtures/<名字>/`（样例工程）和 `golden/cases/<ID>/case.yaml`（+ `expected/`）。
-//! 所有比较都是逐字节的。
+//! 用例可以用 `overlay` 在样例工程上叠加修改（JSON merge-patch 语义：映射递归合并，
+//! 列表和标量整体替换，`null` 删除键），不用复制整个工程。所有比较都是逐字节的。
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::Path;
 use std::process::ExitCode;
 
-use core_store::SourceSet;
+use core_store::{SourceSet, SOURCE_FILES};
 use serde::Deserialize;
-use serde_json::json;
+use serde_json::{json, Value as Json};
 use serde_yaml_ng::Value;
 
 use crate::{EXIT_CONFLICT, EXIT_INTERNAL};
+
+const REPORT: &str = "build/solve_report.json";
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -23,10 +26,22 @@ struct Case {
     kind: Kind,
     #[serde(default)]
     fixture: Option<String>,
+    /// 叠加在样例工程上的修改：`文件名 → 补丁`
+    #[serde(default)]
+    overlay: Option<Value>,
     #[serde(default)]
     seeds: Option<u64>,
     #[serde(default)]
     iterations: Option<u32>,
+    /// compile：报告里的 status 必须等于它
+    #[serde(default)]
+    expect_status: Option<String>,
+    /// compile：冲突选项的 target 不能出现这些值
+    #[serde(default)]
+    forbid_option_targets: Vec<String>,
+    /// locality：最多允许几个区变化
+    #[serde(default)]
+    max_changed_zones: Option<usize>,
 }
 
 #[derive(Deserialize, Clone, Copy, PartialEq, Eq)]
@@ -40,6 +55,8 @@ enum Kind {
     Shuffle,
     /// 时间刻度往返与累加无漂移
     TickRoundtrip,
+    /// 对比叠加修改前后，按区统计变化：段落整体平移不算变化
+    Locality,
 }
 
 type Files = BTreeMap<String, Vec<u8>>;
@@ -66,7 +83,8 @@ fn load_cases(root: &Path) -> Result<BTreeMap<String, Case>, String> {
     Ok(cases)
 }
 
-fn fixture(root: &Path, case: &Case) -> Result<SourceSet, String> {
+/// 样例工程本身（不含 overlay）。
+fn base_fixture(root: &Path, case: &Case) -> Result<SourceSet, String> {
     let name = case
         .fixture
         .as_deref()
@@ -75,14 +93,195 @@ fn fixture(root: &Path, case: &Case) -> Result<SourceSet, String> {
     SourceSet::read_dir(&dir).map_err(|e| format!("读取 {} 失败：{e}", dir.display()))
 }
 
+/// 样例工程 + overlay。
+fn fixture(root: &Path, case: &Case) -> Result<SourceSet, String> {
+    let base = base_fixture(root, case)?;
+    match &case.overlay {
+        None => Ok(base),
+        Some(o) => apply_overlay(&base, o).map_err(|e| format!("{} 的 overlay：{e}", case.id)),
+    }
+}
+
+fn apply_overlay(src: &SourceSet, overlay: &Value) -> Result<SourceSet, String> {
+    let Value::Mapping(files) = overlay else {
+        return Err("overlay 必须是“文件名 → 补丁”的映射".to_string());
+    };
+    let mut out = src.clone();
+    for (k, patch) in files {
+        let name = k.as_str().ok_or("文件名必须是字符串")?;
+        if !SOURCE_FILES.contains(&name) {
+            return Err(format!("不能修改 {name}：只能修改源文件"));
+        }
+        let text = src.get(name).unwrap_or("");
+        let merged = if name.ends_with(".json") {
+            let mut base: Json = if text.is_empty() {
+                Json::Object(serde_json::Map::new())
+            } else {
+                serde_json::from_str(text).map_err(|e| format!("{name}：{e}"))?
+            };
+            let p: Json = serde_json::to_value(patch).map_err(|e| format!("{name}：{e}"))?;
+            merge_json(&mut base, p);
+            let mut s = serde_json::to_string_pretty(&base).map_err(|e| e.to_string())?;
+            s.push('\n');
+            s
+        } else {
+            let mut base: Value = if text.is_empty() {
+                Value::Mapping(serde_yaml_ng::Mapping::new())
+            } else {
+                serde_yaml_ng::from_str(text).map_err(|e| format!("{name}：{e}"))?
+            };
+            merge_yaml(&mut base, patch.clone());
+            serde_yaml_ng::to_string(&base).map_err(|e| format!("{name}：{e}"))?
+        };
+        out.insert(name, merged);
+    }
+    Ok(out)
+}
+
+fn merge_json(base: &mut Json, patch: Json) {
+    match patch {
+        Json::Object(p) => {
+            if !base.is_object() {
+                *base = Json::Object(serde_json::Map::new());
+            }
+            if let Json::Object(b) = base {
+                for (k, v) in p {
+                    if v.is_null() {
+                        b.remove(&k);
+                    } else if let Some(slot) = b.get_mut(&k) {
+                        merge_json(slot, v);
+                    } else {
+                        b.insert(k, v);
+                    }
+                }
+            }
+        }
+        other => *base = other,
+    }
+}
+
+fn merge_yaml(base: &mut Value, patch: Value) {
+    match patch {
+        Value::Mapping(p) => {
+            if !base.is_mapping() {
+                *base = Value::Mapping(serde_yaml_ng::Mapping::new());
+            }
+            if let Value::Mapping(b) = base {
+                for (k, v) in p {
+                    if v.is_null() {
+                        b.shift_remove(&k);
+                    } else if let Some(slot) = b.get_mut(&k) {
+                        merge_yaml(slot, v);
+                    } else {
+                        b.insert(k, v);
+                    }
+                }
+            }
+        }
+        other => *base = other,
+    }
+}
+
 fn compile(src: &SourceSet) -> Result<Files, String> {
     core_compile::compile(src)
         .map(|o| o.files)
         .map_err(|e| e.to_string())
 }
 
+fn report_of(files: &Files) -> Result<Json, String> {
+    let bytes = files.get(REPORT).ok_or("编译没有产出求解报告")?;
+    serde_json::from_slice(bytes).map_err(|e| e.to_string())
+}
+
 fn expected_dir(root: &Path, id: &str) -> std::path::PathBuf {
     root.join("cases").join(id).join("expected")
+}
+
+/// 冲突选项里是否出现了这个 target。
+fn offered(report: &Json, target: &str) -> bool {
+    report["conflicts"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .flat_map(|c| c["options"].as_array().into_iter().flatten())
+        .any(|o| o["target"].as_str() == Some(target))
+}
+
+/// 一个区的“相对内容”：段落报告（去掉绝对起点）+ 它的节拍报告。
+fn zone_signature(report: &Json, sid: &str) -> Json {
+    let mut sec = report["sections"][sid].clone();
+    let ids: Vec<String> = sec["beats"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|x| x.as_str().map(str::to_string))
+        .collect();
+    if let Some(o) = sec.as_object_mut() {
+        o.remove("start");
+    }
+    let beats: Vec<Json> = ids
+        .iter()
+        .map(|id| report["beats"][id.as_str()].clone())
+        .collect();
+    json!({"section": sec, "beats": beats})
+}
+
+fn changed_zones(a: &Json, b: &Json) -> Vec<String> {
+    let mut ids = BTreeSet::new();
+    for r in [a, b] {
+        if let Some(m) = r["sections"].as_object() {
+            ids.extend(m.keys().cloned());
+        }
+    }
+    ids.into_iter()
+        .filter(|sid| zone_signature(a, sid) != zone_signature(b, sid))
+        .collect()
+}
+
+fn check_compile(root: &Path, case: &Case) -> Result<Outcome, String> {
+    let out = compile(&fixture(root, case)?)?;
+    let report = report_of(&out)?;
+    let status = report["status"].as_str().unwrap_or("").to_string();
+    if let Some(want) = &case.expect_status {
+        if status != *want {
+            return Ok(Outcome::Fail(format!(
+                "status 应为 {want}，实际为 {status}"
+            )));
+        }
+    }
+    for target in &case.forbid_option_targets {
+        if offered(&report, target) {
+            return Ok(Outcome::Fail(format!("冲突选项里不应出现 {target}")));
+        }
+    }
+    let dir = expected_dir(root, &case.id);
+    if !dir.exists() {
+        return Ok(Outcome::Fail(format!(
+            "缺少期望输出。运行 `clip golden bless --case {}`，逐行审阅后提交",
+            case.id
+        )));
+    }
+    let mut expected = Files::new();
+    for name in out.keys() {
+        let file = name.strip_prefix("build/").unwrap_or(name);
+        let path = dir.join(file);
+        let bytes = fs::read(&path).map_err(|e| format!("读取 {} 失败：{e}", path.display()))?;
+        expected.insert(name.clone(), bytes);
+    }
+    let listed = fs::read_dir(&dir).map_err(|e| e.to_string())?.count();
+    if listed != out.len() {
+        return Ok(Outcome::Fail(format!(
+            "expected/ 有 {listed} 个文件，编译产出 {} 个",
+            out.len()
+        )));
+    }
+    match describe(&expected, &out) {
+        None => Ok(Outcome::Pass(format!(
+            "{} 个文件逐字节一致（status: {status}）",
+            out.len()
+        ))),
+        Some(d) => Ok(Outcome::Fail(d)),
+    }
 }
 
 fn run_case(root: &Path, case: &Case) -> Result<Outcome, String> {
@@ -92,35 +291,7 @@ fn run_case(root: &Path, case: &Case) -> Result<Outcome, String> {
             core_model::roundtrip_selftest(n)?;
             Ok(Outcome::Pass(format!("{n} 次往返和累加无漂移")))
         }
-        Kind::Compile => {
-            let out = compile(&fixture(root, case)?)?;
-            let dir = expected_dir(root, &case.id);
-            if !dir.exists() {
-                return Ok(Outcome::Fail(format!(
-                    "缺少期望输出。运行 `clip golden bless --case {}`，逐行审阅后提交",
-                    case.id
-                )));
-            }
-            let mut expected = Files::new();
-            for name in out.keys() {
-                let file = name.strip_prefix("build/").unwrap_or(name);
-                let path = dir.join(file);
-                let bytes =
-                    fs::read(&path).map_err(|e| format!("读取 {} 失败：{e}", path.display()))?;
-                expected.insert(name.clone(), bytes);
-            }
-            let listed = fs::read_dir(&dir).map_err(|e| e.to_string())?.count();
-            if listed != out.len() {
-                return Ok(Outcome::Fail(format!(
-                    "expected/ 有 {listed} 个文件，编译产出 {} 个",
-                    out.len()
-                )));
-            }
-            match describe(&expected, &out) {
-                None => Ok(Outcome::Pass(format!("{} 个文件逐字节一致", out.len()))),
-                Some(d) => Ok(Outcome::Fail(d)),
-            }
-        }
+        Kind::Compile => check_compile(root, case),
         Kind::Idempotent => {
             let src = fixture(root, case)?;
             let first = compile(&src)?;
@@ -149,6 +320,29 @@ fn run_case(root: &Path, case: &Case) -> Result<Outcome, String> {
                 }
             }
             Ok(Outcome::Pass(format!("{n} 个种子打乱后输出一致")))
+        }
+        Kind::Locality => {
+            if case.overlay.is_none() {
+                return Err(format!("{} 是 locality 用例，必须写 overlay", case.id));
+            }
+            let before = report_of(&compile(&base_fixture(root, case)?)?)?;
+            let after = report_of(&compile(&fixture(root, case)?)?)?;
+            let zones = changed_zones(&before, &after);
+            let max = case.max_changed_zones.unwrap_or(2);
+            let detail = format!(
+                "{} 个区变化（{}），上限 {max}",
+                zones.len(),
+                if zones.is_empty() {
+                    "无".to_string()
+                } else {
+                    zones.join("、")
+                }
+            );
+            if zones.len() <= max {
+                Ok(Outcome::Pass(detail))
+            } else {
+                Ok(Outcome::Fail(detail))
+            }
         }
     }
 }
@@ -333,5 +527,34 @@ fn shuffle_value(v: Value, rng: &mut SplitMix64) -> Value {
             Value::Sequence(out)
         }
         other => other,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn merge_patch_semantics() {
+        let mut base: Value = serde_yaml_ng::from_str("a: {b: 1, c: [1, 2]}\nd: 3\n").unwrap();
+        let patch: Value = serde_yaml_ng::from_str("a: {b: 9, c: [7]}\nd: null\ne: 5\n").unwrap();
+        merge_yaml(&mut base, patch);
+        let want: Value = serde_yaml_ng::from_str("a: {b: 9, c: [7]}\ne: 5\n").unwrap();
+        assert_eq!(base, want);
+
+        let mut j = json!({"x": {"y": 1, "z": 2}});
+        merge_json(&mut j, json!({"x": {"y": null, "w": 3}}));
+        assert_eq!(j, json!({"x": {"z": 2, "w": 3}}));
+    }
+
+    #[test]
+    fn zone_signature_ignores_absolute_start() {
+        let a = json!({"sections": {"S1": {"start": 0, "dur": 5, "beats": ["S1.b1"]}},
+                       "beats": {"S1.b1": {"offset": 0, "dur": 5}}});
+        let mut b = a.clone();
+        b["sections"]["S1"]["start"] = json!(100);
+        assert!(changed_zones(&a, &b).is_empty());
+        b["beats"]["S1.b1"]["dur"] = json!(6);
+        assert_eq!(changed_zones(&a, &b), vec!["S1".to_string()]);
     }
 }
