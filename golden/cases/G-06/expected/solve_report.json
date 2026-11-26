@@ -72,14 +72,14 @@
       "body": 2090666667,
       "cost": {
         "pause": 282240000,
-        "rate": 79999
+        "rate": 80000
       },
       "dur": 2231786667,
       "offset": 4845120000,
       "pause": 141120000,
       "reasons": [
         "停顿压缩 0.4s：0.6s → 0.2s",
-        "语速 +7.9%：旁白 3.2s → 2.963s（需要重新合成 TTS）"
+        "语速 +8.0%：旁白 3.2s → 2.963s（需要重新合成 TTS）"
       ],
       "visuals": [
         {
@@ -94,7 +94,7 @@
       "voice": {
         "len": 2090666667,
         "natural": 2257920000,
-        "speed_ppm": 1079999
+        "speed_ppm": 1080000
       }
     }
   },
@@ -129,25 +129,26 @@
       ],
       "options": [
         {
-          "amount": 862400000,
-          "id": "A",
-          "op": "remove",
-          "target": "n:S1.1",
-          "term": "meaning"
-        },
-        {
           "amount": 1385066667,
-          "id": "B",
+          "id": "A",
           "op": "remove",
           "target": "n:S2.2",
           "term": "meaning"
         },
         {
           "amount": 248266667,
-          "id": "C",
+          "id": "B",
           "op": "relax",
           "target": "intent.duration",
           "term": "intent"
+        },
+        {
+          "amount": 862400000,
+          "id": "C",
+          "op": "remove",
+          "protected_role": "opening",
+          "target": "n:S1.1",
+          "term": "meaning"
         }
       ],
       "over": 248266667,
@@ -182,7 +183,7 @@
     ],
     [
       "rate",
-      239999
+      240000
     ],
     [
       "trim",
@@ -261,7 +262,7 @@
     },
     {
       "narration": "n:S2.2",
-      "speed_ppm": 1079999
+      "speed_ppm": 1080000
     }
   ],
   "warnings": [

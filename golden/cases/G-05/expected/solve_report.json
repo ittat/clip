@@ -129,18 +129,19 @@
       ],
       "options": [
         {
-          "amount": 862400000,
-          "id": "A",
-          "op": "remove",
-          "target": "n:S1.1",
-          "term": "meaning"
-        },
-        {
           "amount": 39200000,
-          "id": "B",
+          "id": "A",
           "op": "relax",
           "target": "intent.duration",
           "term": "intent"
+        },
+        {
+          "amount": 862400000,
+          "id": "B",
+          "op": "remove",
+          "protected_role": "opening",
+          "target": "n:S1.1",
+          "term": "meaning"
         },
         {
           "amount": 2142933333,
