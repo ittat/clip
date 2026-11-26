@@ -1,0 +1,13 @@
+id: G-05
+title: 无解：S2.b2 的 B-roll 改为人工固定 6s
+kind: compile
+fixture: min_explainer
+expect_status: conflict
+# 固定画面撑长 S2.b2，用尽停顿、语速和 S1 的弹性后全片仍超出 L4 上限：
+# 必须给出最小冲突集；“解锁固定画面”是第 2 项，排在最后
+overlay:
+  content.yaml:
+    beats:
+      S2.b2:
+        visual:
+          - {shot: "shot:B.3", role: b-roll, fit: fixed, len: 6s}

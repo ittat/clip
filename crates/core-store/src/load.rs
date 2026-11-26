@@ -181,6 +181,8 @@ mod raw {
         pub fit: Option<String>,
         #[serde(default)]
         pub from: Option<String>,
+        #[serde(default)]
+        pub len: Option<String>,
     }
 
     #[derive(Deserialize)]
@@ -876,6 +878,40 @@ fn build_beats(
                     None => continue,
                 },
             };
+            let len = match v.len.as_deref() {
+                None => None,
+                Some(s) => {
+                    let Some(l) = cx.dur(F, &format!("{at}.len"), s, fps) else {
+                        continue;
+                    };
+                    Some(l)
+                }
+            };
+            match (fit, len) {
+                (Fit::Fixed, None) => {
+                    cx.err(
+                        F,
+                        &format!("{at}.len"),
+                        "fit: fixed 必须写 len",
+                        Some("例如 len: 3.2s"),
+                    );
+                    continue;
+                }
+                (Fit::Fixed, Some(l)) if l <= Tick::ZERO => {
+                    cx.err(F, &format!("{at}.len"), "len 必须为正", None);
+                    continue;
+                }
+                (Fit::Fixed, Some(_)) | (_, None) => {}
+                (_, Some(_)) => {
+                    cx.err(
+                        F,
+                        &format!("{at}.len"),
+                        "len 只能和 fit: fixed 一起用",
+                        None,
+                    );
+                    continue;
+                }
+            }
             let from = match v.from.as_deref() {
                 None => None,
                 Some(s) => {
@@ -896,6 +932,7 @@ fn build_beats(
                 role,
                 fit,
                 from,
+                len,
             });
         }
 

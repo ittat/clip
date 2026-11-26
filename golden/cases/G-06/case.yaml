@@ -1,0 +1,22 @@
+id: G-06
+title: must 句变长：必须上报，不能删 must 句
+kind: compile
+fixture: min_explainer
+expect_status: conflict
+forbid_option_targets: ["n:S2.1"]
+# 替身 TTS 把 n:S2.1（含 must 词 w1..w4）变成 7.2s，词时间同比放大
+overlay:
+  locks/tts.lock.json:
+    entries:
+      "n:S2.1":
+        dur: 5080320000
+        words:
+          - {i: 1, t0: 0, t1: 564480000, txt: "其实"}
+          - {i: 2, t0: 846720000, t1: 1241856000, txt: "这个"}
+          - {i: 3, t0: 1241856000, t1: 1693440000, txt: "计划"}
+          - {i: 4, t0: 1693440000, t1: 1919232000, txt: "从"}
+          - {i: 5, t0: 1919232000, t1: 2596608000, txt: "一开始"}
+          - {i: 6, t0: 2596608000, t1: 2822400000, txt: "就"}
+          - {i: 7, t0: 2822400000, t1: 3386880000, txt: "注定"}
+          - {i: 8, t0: 3386880000, t1: 4007808000, txt: "失败"}
+          - {i: 9, t0: 4007808000, t1: 4233600000, txt: "了"}

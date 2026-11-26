@@ -1,4 +1,4 @@
-# 本地开发循环：跑全部检查，把输出写到仓库外的 logs\，供 AI 读取。
+﻿# 本地开发循环：跑全部检查，把输出写到仓库外的 logs\，供 AI 读取。
 # 用法（在仓库根目录）：powershell -ExecutionPolicy Bypass -File scripts\dev.ps1
 # 只跑某一步：scripts\dev.ps1 -Only test
 

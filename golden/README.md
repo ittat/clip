@@ -9,6 +9,10 @@
 | `idempotent` | 连续编译 3 次，并把 `build/` 产物混入源文件集合，结果必须一致 |
 | `shuffle` | 用多个种子打乱 YAML 映射的键顺序并重新序列化，结果必须一致 |
 | `tick_roundtrip` | 时间刻度往返与帧累加无漂移 |
+| `locality` | 对比 overlay 前后，按区统计变化（段落整体平移不算），不超过 `max_changed_zones` |
+
+用例可以写 `overlay` 在样例工程上叠加修改（JSON merge-patch：映射递归合并，列表和标量整体替换，`null` 删除键），不用复制整个工程。
+`compile` 用例还可以写 `expect_status` 和 `forbid_option_targets`（冲突选项里不能出现的目标）。
 
 更新期望输出：
 

@@ -1,0 +1,275 @@
+{
+  "beats": {
+    "S1.b1": {
+      "body": 1568000000,
+      "cost": {
+        "pause": 141120000,
+        "rate": 80000
+      },
+      "dur": 1709120000,
+      "offset": 0,
+      "pause": 141120000,
+      "reasons": [
+        "停顿压缩 0.2s：0.4s → 0.2s",
+        "语速 +8.0%：旁白 2.4s → 2.222s（需要重新合成 TTS）"
+      ],
+      "visuals": [
+        {
+          "fill": "cut",
+          "index": 0,
+          "missing": 0,
+          "offset": 0,
+          "rec_len": 1709120000,
+          "src_len": 1709120000
+        }
+      ],
+      "voice": {
+        "len": 1568000000,
+        "natural": 1693440000,
+        "speed_ppm": 1080000
+      }
+    },
+    "S2.b1": {
+      "body": 4704000000,
+      "cost": {
+        "pause": 141120000,
+        "rate": 80000,
+        "trim": 352800000
+      },
+      "dur": 4845120000,
+      "offset": 0,
+      "pause": 141120000,
+      "reasons": [
+        "停顿压缩 0.2s：0.4s → 0.2s",
+        "语速 +8.0%：旁白 7.2s → 6.667s（需要重新合成 TTS）",
+        "visual[1] shot:B.2 慢放到上限 20% 仍缺 1.348s"
+      ],
+      "visuals": [
+        {
+          "fill": "cut",
+          "index": 0,
+          "missing": 0,
+          "offset": 0,
+          "rec_len": 4845120000,
+          "src_len": 4845120000
+        },
+        {
+          "fill": "short",
+          "index": 1,
+          "missing": 951253334,
+          "offset": 1777066666,
+          "rec_len": 2116800000,
+          "src_len": 1764000000
+        }
+      ],
+      "voice": {
+        "len": 4704000000,
+        "natural": 5080320000,
+        "speed_ppm": 1080000
+      }
+    },
+    "S2.b2": {
+      "body": 2090666667,
+      "cost": {
+        "pause": 282240000,
+        "rate": 79999
+      },
+      "dur": 2231786667,
+      "offset": 4845120000,
+      "pause": 141120000,
+      "reasons": [
+        "停顿压缩 0.4s：0.6s → 0.2s",
+        "语速 +7.9%：旁白 3.2s → 2.963s（需要重新合成 TTS）"
+      ],
+      "visuals": [
+        {
+          "fill": "cut",
+          "index": 0,
+          "missing": 0,
+          "offset": 0,
+          "rec_len": 2231786667,
+          "src_len": 2231786667
+        }
+      ],
+      "voice": {
+        "len": 2090666667,
+        "natural": 2257920000,
+        "speed_ppm": 1079999
+      }
+    }
+  },
+  "conflicts": [
+    {
+      "code": "intent_over",
+      "min_conflict_set": [
+        {
+          "target": "intent.duration.max",
+          "value": 8537760000
+        },
+        {
+          "min": 4704000000,
+          "target": "n:S2.1"
+        },
+        {
+          "min": 2090666667,
+          "target": "n:S2.2"
+        },
+        {
+          "min": 1568000000,
+          "target": "n:S1.1"
+        },
+        {
+          "min": 141120000,
+          "target": "S1.b1.pause"
+        },
+        {
+          "min": 141120000,
+          "target": "S2.b1.pause"
+        }
+      ],
+      "options": [
+        {
+          "amount": 862400000,
+          "id": "A",
+          "op": "remove",
+          "target": "n:S1.1",
+          "term": "meaning"
+        },
+        {
+          "amount": 1385066667,
+          "id": "B",
+          "op": "remove",
+          "target": "n:S2.2",
+          "term": "meaning"
+        },
+        {
+          "amount": 248266667,
+          "id": "C",
+          "op": "relax",
+          "target": "intent.duration",
+          "term": "intent"
+        }
+      ],
+      "over": 248266667,
+      "recommend": "A",
+      "term": "intent"
+    }
+  ],
+  "cost": [
+    [
+      "hard",
+      0
+    ],
+    [
+      "human_lock",
+      0
+    ],
+    [
+      "intent",
+      248266667
+    ],
+    [
+      "meaning",
+      0
+    ],
+    [
+      "declared_budget",
+      1432106667
+    ],
+    [
+      "cross_zone",
+      1
+    ],
+    [
+      "rate",
+      239999
+    ],
+    [
+      "trim",
+      352800000
+    ],
+    [
+      "pause",
+      564480000
+    ],
+    [
+      "diff_from_prev",
+      0
+    ]
+  ],
+  "format": 1,
+  "intent": {
+    "max": 8537760000,
+    "min": 6985440000,
+    "over": 248266667,
+    "target": 7761600000,
+    "within": false
+  },
+  "not_applied": [
+    "music:S2.b1",
+    "music:S2.b2",
+    "ov1",
+    "ov2",
+    "r:1",
+    "pause.stretch",
+    "visual.cut_points",
+    "intent.stretch"
+  ],
+  "project_solver": "0.0.1",
+  "sections": {
+    "S1": {
+      "beats": [
+        "S1.b1"
+      ],
+      "borrowed": [],
+      "budget": null,
+      "budget_kind": "derived",
+      "dur": 1709120000,
+      "l4_absorbed": true,
+      "lent": [],
+      "natural": 1975680000,
+      "over": null,
+      "start": 0
+    },
+    "S2": {
+      "beats": [
+        "S2.b1",
+        "S2.b2"
+      ],
+      "borrowed": [],
+      "budget": 5644800000,
+      "budget_kind": "declared",
+      "dur": 7076906667,
+      "l4_absorbed": false,
+      "lent": [],
+      "natural": 8043840000,
+      "over": 1432106667,
+      "start": 1709120000
+    }
+  },
+  "solver": "zone-2",
+  "status": "conflict",
+  "total": 8786026667,
+  "tts_resynth_needed": [
+    {
+      "narration": "n:S1.1",
+      "speed_ppm": 1080000
+    },
+    {
+      "narration": "n:S2.1",
+      "speed_ppm": 1080000
+    },
+    {
+      "narration": "n:S2.2",
+      "speed_ppm": 1079999
+    }
+  ],
+  "warnings": [
+    {
+      "beat": "S2.b1",
+      "code": "visual_shortfall",
+      "missing": 951253334,
+      "shot": "shot:B.2"
+    }
+  ]
+}
