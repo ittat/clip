@@ -1,0 +1,182 @@
+{
+  "beats": {
+    "S1.b1": {
+      "body": 1693440000,
+      "cost": {},
+      "dur": 1975680000,
+      "offset": 0,
+      "pause": 282240000,
+      "reasons": [],
+      "visuals": [
+        {
+          "fill": "cut",
+          "index": 0,
+          "missing": 0,
+          "offset": 0,
+          "rec_len": 1975680000,
+          "src_len": 1975680000
+        }
+      ],
+      "voice": {
+        "len": 1693440000,
+        "natural": 1693440000,
+        "speed_ppm": 1000000
+      }
+    },
+    "S2.b1": {
+      "body": 2596608000,
+      "cost": {
+        "trim": 155232000
+      },
+      "dur": 2878848000,
+      "offset": 0,
+      "pause": 282240000,
+      "reasons": [
+        "visual[1] shot:B.2 慢放 8.8%：素材 2.5s 撑满 2.72s"
+      ],
+      "visuals": [
+        {
+          "fill": "cut",
+          "index": 0,
+          "missing": 0,
+          "offset": 0,
+          "rec_len": 2878848000,
+          "src_len": 2878848000
+        },
+        {
+          "fill": "retime",
+          "index": 1,
+          "missing": 0,
+          "offset": 959616000,
+          "rec_len": 1919232000,
+          "src_len": 1764000000
+        }
+      ],
+      "voice": {
+        "len": 2596608000,
+        "natural": 2596608000,
+        "speed_ppm": 1000000
+      }
+    },
+    "S2.b2": {
+      "body": 2257920000,
+      "cost": {},
+      "dur": 2681280000,
+      "offset": 2878848000,
+      "pause": 423360000,
+      "reasons": [],
+      "visuals": [
+        {
+          "fill": "cut",
+          "index": 0,
+          "missing": 0,
+          "offset": 0,
+          "rec_len": 2681280000,
+          "src_len": 2681280000
+        }
+      ],
+      "voice": {
+        "len": 2257920000,
+        "natural": 2257920000,
+        "speed_ppm": 1000000
+      }
+    }
+  },
+  "conflicts": [],
+  "cost": [
+    [
+      "hard",
+      0
+    ],
+    [
+      "human_lock",
+      0
+    ],
+    [
+      "intent",
+      0
+    ],
+    [
+      "meaning",
+      0
+    ],
+    [
+      "declared_budget",
+      0
+    ],
+    [
+      "cross_zone",
+      0
+    ],
+    [
+      "rate",
+      0
+    ],
+    [
+      "trim",
+      155232000
+    ],
+    [
+      "pause",
+      0
+    ],
+    [
+      "diff_from_prev",
+      0
+    ]
+  ],
+  "format": 1,
+  "intent": {
+    "max": 8537760000,
+    "min": 6985440000,
+    "over": 0,
+    "target": 7761600000,
+    "under": 0,
+    "within": true
+  },
+  "not_applied": [
+    "music:S2.b1",
+    "music:S2.b2",
+    "ov1",
+    "ov2",
+    "r:1",
+    "visual.cut_points"
+  ],
+  "project_solver": "0.0.1",
+  "sections": {
+    "S1": {
+      "beats": [
+        "S1.b1"
+      ],
+      "borrowed": [],
+      "budget": null,
+      "budget_kind": "derived",
+      "dur": 1975680000,
+      "l4_absorbed": false,
+      "lent": [],
+      "natural": 1975680000,
+      "over": null,
+      "start": 0
+    },
+    "S2": {
+      "beats": [
+        "S2.b1",
+        "S2.b2"
+      ],
+      "borrowed": [],
+      "budget": null,
+      "budget_kind": "derived",
+      "dur": 5560128000,
+      "l4_absorbed": false,
+      "lent": [],
+      "natural": 5560128000,
+      "over": null,
+      "start": 1975680000
+    }
+  },
+  "solver": "zone-3",
+  "status": "ok",
+  "total": 7535808000,
+  "tts_resynth_needed": [],
+  "warnings": []
+}

@@ -1,0 +1,28 @@
+id: G-10
+title: 推导的预算变化不计代价
+kind: compile
+fixture: min_explainer
+expect_status: ok
+expect_zero_costs: [declared_budget, cross_zone, intent, pause, rate]
+# S2 不声明预算（由求解得出），旁白变长 0.08s（同 G-04）：
+# 段落自然变长即可，不产生任何时间类代价
+overlay:
+  structure.yaml:
+    sections:
+      S2: {budget: null}
+  narration.yaml:
+    "n:S2.1": {text: "其实，这个计划从一开始就{注定|zhu4ding4}破产了。[停0.3]"}
+  locks/tts.lock.json:
+    entries:
+      "n:S2.1":
+        dur: 2596608000
+        words:
+          - {i: 1, t0: 0, t1: 282240000, txt: "其实"}
+          - {i: 2, t0: 423360000, t1: 620928000, txt: "这个"}
+          - {i: 3, t0: 620928000, t1: 846720000, txt: "计划"}
+          - {i: 4, t0: 846720000, t1: 959616000, txt: "从"}
+          - {i: 5, t0: 959616000, t1: 1298304000, txt: "一开始"}
+          - {i: 6, t0: 1298304000, t1: 1411200000, txt: "就"}
+          - {i: 7, t0: 1411200000, t1: 1693440000, txt: "注定"}
+          - {i: 8, t0: 1693440000, t1: 2060352000, txt: "破产"}
+          - {i: 9, t0: 2060352000, t1: 2173248000, txt: "了"}

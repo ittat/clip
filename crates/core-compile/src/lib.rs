@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use core_model::*;
 use core_solver::{
-    body_min, min_elements, solve, BeatInput, BeatPlacement, FillKind, Part, PauseInput,
+    body_min, max_total, min_elements, solve, BeatInput, BeatPlacement, FillKind, Part, PauseInput,
     SolveInput, SolveOutput, VisualInput, VisualKind, ZoneInput, ZonePlacement, MAX_RETIME_PERCENT,
     UNIT_SPEED,
 };
@@ -281,6 +281,14 @@ fn reasons(p: &Project, pl: &BeatPlacement) -> Vec<String> {
         out.push(format!(
             "停顿压缩 {}：{} → {}",
             human(pl.pause_natural - pl.pause),
+            human(pl.pause_natural),
+            human(pl.pause)
+        ));
+    }
+    if pl.pause > pl.pause_natural {
+        out.push(format!(
+            "停顿拉长 {}：{} → {}",
+            human(pl.pause - pl.pause_natural),
             human(pl.pause_natural),
             human(pl.pause)
         ));
@@ -567,6 +575,27 @@ fn intent_conflict(p: &Project, input: &SolveInput, out: &SolveOutput) -> Option
     }))
 }
 
+/// 全片短于 L4 下限：拉伸用尽后仍不够。
+fn under_conflict(input: &SolveInput, out: &SolveOutput) -> Option<Value> {
+    if out.intent_under <= Tick::ZERO {
+        return None;
+    }
+    let under = out.intent_under;
+    let (options, recommend) = finish_options(vec![
+        Opt::new("add", "content".to_string(), "meaning", under),
+        Opt::new("relax", "intent.duration".to_string(), "intent", under),
+    ]);
+    Some(json!({
+        "code": "intent_under",
+        "term": "intent",
+        "under": t(under),
+        "max_total": t(max_total(input)),
+        "note": "语速不放慢；停顿和画面已拉到上限",
+        "options": options,
+        "recommend": recommend,
+    }))
+}
+
 fn report(
     p: &Project,
     input: &SolveInput,
@@ -602,6 +631,7 @@ fn report(
 
     let mut conflicts = hard_conflicts(out);
     conflicts.extend(intent_conflict(p, input, out));
+    conflicts.extend(under_conflict(input, out));
 
     // 还没有执行的约束要如实列出，避免“静默忽略”
     let mut not_applied = Vec::new();
@@ -616,9 +646,7 @@ fn report(
     for id in &p.rules {
         not_applied.push(id.to_string());
     }
-    not_applied.push("pause.stretch".to_string());
     not_applied.push("visual.cut_points".to_string());
-    not_applied.push("intent.stretch".to_string());
 
     let status = match status {
         Status::Ok => "ok",
@@ -637,6 +665,7 @@ fn report(
             "max": t(hi),
             "within": within,
             "over": t(out.intent_over),
+            "under": t(out.intent_under),
         },
         "sections": sections,
         "beats": beats,

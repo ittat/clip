@@ -1,0 +1,12 @@
+id: G-18
+title: 全片偏短：先在预算内拉停顿，不放慢语速，不够就上报
+kind: compile
+fixture: min_explainer
+expect_status: conflict
+expect_zero_costs: [rate]
+expect_nonzero_costs: [intent, pause]
+# L4 改为 14s ±5%（13.3–14.7s），自然 10.6s。停顿最多拉长 1.2s，
+# S2 只有 0.2s 在预算内：其余部分超出声明预算（第 5 项），仍差约 1.5s → 上报
+overlay:
+  intent.yaml:
+    duration: {target: 14s, tol: 5%}

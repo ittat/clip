@@ -6,11 +6,15 @@
 //! 3. 借用：仍超预算的区，向相邻区未用完的声明预算借时间（第 6 项，每个出借区计 1）
 //! 4. 借不到的部分记为偏离声明预算（第 5 项）：编译器可以接受，写进报告
 //!
+//! PR 4：全片短于 L4 下限时拉伸，顺序同样由代价决定：停顿拉到 flex 上限（第 9 项）→
+//! 纯画面节拍的主体变长（第 8 项，画面靠慢放撑满，最多 20%）。**不放慢语速**。
+//! 先在不超出声明预算的范围内拉，再拉其余部分（会产生第 5 项）；仍不够的记为第 3 项，必须上报。
+//!
 //! 每一步按各节拍的可用量按比例分配，余数按成片顺序逐个补 1 flick，结果确定。
 
 use core_model::{BeatId, Cost, SectionId, Tick, FLICKS_PER_SECOND};
 
-pub const SOLVER_VERSION: &str = "zone-2";
+pub const SOLVER_VERSION: &str = "zone-3";
 
 /// 慢放上限：成片时长最多比素材长 20%。
 pub const MAX_RETIME_PERCENT: i64 = 20;
@@ -190,6 +194,8 @@ pub struct SolveOutput {
     pub cost: Cost,
     /// 用尽全部弹性后仍超出 L4 上限的部分（第 3 项）
     pub intent_over: Tick,
+    /// 用尽全部可拉伸量后仍短于 L4 下限的部分（第 3 项）
+    pub intent_under: Tick,
     pub hard: Vec<HardIssue>,
 }
 
@@ -258,6 +264,17 @@ fn elastic_natural(b: &BeatInput) -> Tick {
 
 fn elastic_min(b: &BeatInput) -> Tick {
     elastic_natural(b).min(MIN_ELASTIC_BODY)
+}
+
+/// 纯画面节拍主体的最大长度：每条画面都能靠慢放（≤20%）撑满。
+fn elastic_max(b: &BeatInput) -> Tick {
+    let fit_all = b
+        .visuals
+        .iter()
+        .map(|v| v.offset + retime_limit(v.have))
+        .min()
+        .unwrap_or(Tick::ZERO);
+    fit_all.max(elastic_natural(b))
 }
 
 fn natural_state(b: &BeatInput) -> BeatState {
@@ -413,6 +430,77 @@ fn apply(b: &BeatInput, s: &mut BeatState, lever: Lever, x: Tick) -> Tick {
     }
 }
 
+/// 拉伸用的手段，代价从低到高：停顿（9）→ 画面（8）。不放慢语速。
+const STRETCH_LEVERS: [Lever; 2] = [Lever::Pause, Lever::Elastic];
+
+fn stretch_capacity(b: &BeatInput, s: &BeatState, lever: Lever) -> Tick {
+    match lever {
+        Lever::Pause => b.pause.max - s.pause,
+        Lever::Elastic if elastic_only(b) => elastic_max(b) - s.elastic,
+        Lever::Elastic | Lever::Rate => Tick::ZERO,
+    }
+}
+
+fn stretch_apply(s: &mut BeatState, lever: Lever, x: Tick) {
+    match lever {
+        Lever::Pause => s.pause = s.pause + x,
+        Lever::Elastic => s.elastic = s.elastic + x,
+        Lever::Rate => {}
+    }
+}
+
+/// 把 `cap` 限制在 `limit` 以内，按比例缩减（余数按顺序补）。
+fn clamp_total(caps: &[Tick], limit: Tick) -> Vec<Tick> {
+    if sum(caps) <= limit {
+        caps.to_vec()
+    } else {
+        distribute(limit, caps)
+    }
+}
+
+/// 拉长全片至多 `need`，返回实际拉长量。
+/// `within_budget` 为真时，声明了预算的区最多拉到预算为止。
+fn stretch(
+    input: &SolveInput,
+    states: &mut [Vec<BeatState>],
+    need: Tick,
+    within_budget: bool,
+) -> Tick {
+    let mut left = need;
+    for lever in STRETCH_LEVERS {
+        if left <= Tick::ZERO {
+            break;
+        }
+        let mut targets = Vec::new();
+        let mut caps = Vec::new();
+        for (zi, z) in input.zones.iter().enumerate() {
+            let mut zone_caps: Vec<Tick> = z
+                .beats
+                .iter()
+                .zip(&states[zi])
+                .map(|(b, s)| stretch_capacity(b, s, lever))
+                .collect();
+            if within_budget {
+                if let Some(budget) = z.budget {
+                    let d = zone_dur(z, &states[zi]);
+                    let room = if budget > d { budget - d } else { Tick::ZERO };
+                    zone_caps = clamp_total(&zone_caps, room);
+                }
+            }
+            for (i, c) in zone_caps.into_iter().enumerate() {
+                targets.push((zi, i));
+                caps.push(c);
+            }
+        }
+        let shares = distribute(left, &caps);
+        for (&(z, i), x) in targets.iter().zip(shares) {
+            stretch_apply(&mut states[z][i], lever, x);
+            left = left - x;
+        }
+    }
+    need - left
+}
+
 /// 按可用量比例分配 `need`；余数按顺序逐个补 1 flick。
 fn distribute(need: Tick, caps: &[Tick]) -> Vec<Tick> {
     let total: i128 = caps.iter().map(|c| i128::from(c.flicks())).sum();
@@ -553,7 +641,7 @@ fn place_beat(
     let retime = visuals
         .iter()
         .fold(Tick::ZERO, |acc, v| acc + v.retime_extra());
-    let elastic_shrink = if elastic_only(b) {
+    let elastic_shrink = if elastic_only(b) && s.elastic < elastic_natural(b) {
         elastic_natural(b) - s.elastic
     } else {
         Tick::ZERO
@@ -565,11 +653,17 @@ fn place_beat(
     let rate = voice.map_or(0, |v| {
         u64::try_from(v.speed_ppm() - UNIT_SPEED).unwrap_or(0)
     });
+    // 停顿压缩和拉长都是偏离；画面拉长的代价已在慢放（retime_extra）里
+    let pause_delta = if s.pause > b.pause.natural {
+        s.pause - b.pause.natural
+    } else {
+        b.pause.natural - s.pause
+    };
     let cost = Cost {
         hard: issues,
         rate,
         trim: to_cost(retime + elastic_shrink),
-        pause: to_cost(b.pause.natural - s.pause),
+        pause: to_cost(pause_delta),
         ..Cost::default()
     };
     BeatPlacement {
@@ -627,6 +721,22 @@ pub fn solve(input: &SolveInput, _prev: Option<&SolveOutput>) -> SolveOutput {
         }
     }
 
+    // 2b. 全片短于 L4 下限：先在声明预算以内拉，再拉其余部分
+    let (min, _) = input.window;
+    let mut intent_under = Tick::ZERO;
+    let before = zone_durs(input, &states);
+    let total = sum(&before);
+    if total < min {
+        let need = min - total;
+        let first = stretch(input, &mut states, need, true);
+        let second = stretch(input, &mut states, need - first, false);
+        intent_under = need - first - second;
+        let after = zone_durs(input, &states);
+        for ((flag, b), a) in l4.iter_mut().zip(&before).zip(&after) {
+            *flag = *flag || a > b;
+        }
+    }
+
     // 3. 借用相邻区未用完的声明预算；4. 剩余部分记为偏离声明预算
     let durs = zone_durs(input, &states);
     let mut slack: Vec<Tick> = input
@@ -671,7 +781,7 @@ pub fn solve(input: &SolveInput, _prev: Option<&SolveOutput>) -> SolveOutput {
     // 组装结果
     let l4_count = l4.iter().filter(|&&f| f).count();
     let mut cost = Cost {
-        intent: to_cost(intent_over),
+        intent: to_cost(intent_over + intent_under),
         declared_budget: to_cost(sum(&over)),
         cross_zone: u32::try_from(lenders + l4_count).unwrap_or(u32::MAX),
         ..Cost::default()
@@ -712,8 +822,23 @@ pub fn solve(input: &SolveInput, _prev: Option<&SolveOutput>) -> SolveOutput {
         total: cursor,
         cost,
         intent_over,
+        intent_under,
         hard,
     }
+}
+
+/// 所有可拉伸量用尽后（不放慢语速）全片的最大长度。
+pub fn max_total(input: &SolveInput) -> Tick {
+    input.zones.iter().fold(Tick::ZERO, |acc, z| {
+        z.beats.iter().fold(acc, |acc, b| {
+            let s = BeatState {
+                voice: b.voice,
+                elastic: elastic_max(b),
+                pause: b.pause.max,
+            };
+            acc + body(b, &s) + s.pause
+        })
+    })
 }
 
 /// 冲突集里的元素：节拍主体由谁决定，或停顿。
@@ -1011,6 +1136,77 @@ mod tests {
             .iter()
             .fold(Tick::ZERO, |a, e| a + e.min);
         assert_eq!(total_min - s(9), out.intent_over);
+    }
+
+    #[test]
+    fn short_film_stretches_pauses_within_budget_first() {
+        let input = SolveInput {
+            zones: vec![
+                zone(
+                    "S1",
+                    None,
+                    vec![beat("S1.b1", Some(s(2)), vec![], pause(400, 200))],
+                ),
+                zone(
+                    "S2",
+                    Some(ms(2500)),
+                    vec![beat("S2.b1", Some(s(2)), vec![], pause(400, 200))],
+                ),
+            ],
+            window: (s(5), s(10)),
+        };
+        // 自然 4.8s，差 0.2s；S2 预算还剩 0.1s
+        let out = solve(&input, None);
+        assert_eq!(out.total, s(5));
+        assert_eq!(out.intent_under, Tick::ZERO);
+        let p1 = out.zones[0].beats[0].pause;
+        let p2 = out.zones[1].beats[0].pause;
+        assert_eq!(p1 + p2, ms(1000));
+        assert!(p2 <= ms(500), "S2 只在预算内拉长");
+        assert_eq!(out.zones[1].over, Tick::ZERO);
+        assert_eq!(out.zones[0].beats[0].voice.unwrap().len, s(2), "不放慢语速");
+        assert_eq!(out.cost.pause, to_cost(ms(200)));
+    }
+
+    #[test]
+    fn short_film_escalates_when_not_enough() {
+        let input = SolveInput {
+            zones: vec![zone(
+                "S1",
+                None,
+                vec![beat("S1.b1", Some(s(2)), vec![], pause(400, 200))],
+            )],
+            window: (s(5), s(10)),
+        };
+        let out = solve(&input, None);
+        // 停顿最多拉到 0.8s：总长 2.8s，仍差 2.2s
+        assert_eq!(out.total, ms(2800));
+        assert_eq!(out.intent_under, ms(2200));
+        assert_eq!(max_total(&input), ms(2800));
+        assert!(out.cost.needs_escalation());
+    }
+
+    #[test]
+    fn elastic_only_beat_stretches_by_retime() {
+        let input = SolveInput {
+            zones: vec![zone(
+                "S1",
+                None,
+                vec![beat(
+                    "S1.b1",
+                    None,
+                    vec![vis(Tick::ZERO, s(5), VisualKind::Elastic)],
+                    pause(0, 0),
+                )],
+            )],
+            window: (s(6), s(10)),
+        };
+        let out = solve(&input, None);
+        let b = &out.zones[0].beats[0];
+        assert_eq!(b.dur, s(6));
+        assert_eq!(b.visuals[0].fill, FillKind::Retime);
+        assert_eq!(b.elastic_shrink, Tick::ZERO);
+        assert_eq!(out.cost.trim, to_cost(s(1)), "拉长只按慢放计一次");
     }
 
     #[test]

@@ -42,6 +42,12 @@ struct Case {
     /// locality：最多允许几个区变化
     #[serde(default)]
     max_changed_zones: Option<usize>,
+    /// compile：这些代价项必须为 0
+    #[serde(default)]
+    expect_zero_costs: Vec<String>,
+    /// compile：这些代价项必须大于 0
+    #[serde(default)]
+    expect_nonzero_costs: Vec<String>,
 }
 
 #[derive(Deserialize, Clone, Copy, PartialEq, Eq)]
@@ -247,6 +253,27 @@ fn check_compile(root: &Path, case: &Case) -> Result<Outcome, String> {
             return Ok(Outcome::Fail(format!(
                 "status 应为 {want}，实际为 {status}"
             )));
+        }
+    }
+    let cost_of = |name: &str| -> Option<u64> {
+        report["cost"]
+            .as_array()?
+            .iter()
+            .find(|x| x[0].as_str() == Some(name))
+            .and_then(|x| x[1].as_u64())
+    };
+    for name in &case.expect_zero_costs {
+        match cost_of(name) {
+            Some(0) => {}
+            Some(v) => return Ok(Outcome::Fail(format!("代价 {name} 应为 0，实际为 {v}"))),
+            None => return Ok(Outcome::Fail(format!("报告里没有代价项 {name}"))),
+        }
+    }
+    for name in &case.expect_nonzero_costs {
+        match cost_of(name) {
+            Some(v) if v > 0 => {}
+            Some(_) => return Ok(Outcome::Fail(format!("代价 {name} 应大于 0"))),
+            None => return Ok(Outcome::Fail(format!("报告里没有代价项 {name}"))),
         }
     }
     for target in &case.forbid_option_targets {
