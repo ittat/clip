@@ -1,13 +1,20 @@
-# 阶段 0 PR 1 只校验引用，不应用补丁（会列在 solve_report 的 not_applied 里）
+# 补丁在求解之后应用，不反过来影响求解。锚点都是素材坐标
 ov1:
   anchor: {at: "n:S2.1.w2"}
   target: S2.b1.visual[1]
   patch: {exposure: "+0.3"}
   by: human
+# 主锚点（拍子）和备选锚点（动作结束 +2 帧）在基线里重合：相差不到半帧
 ov2:
-  anchor: {at: "bar:M1.3.b1", offset: 0f}
+  anchor: {at: "bar:M1.2.b3", offset: 0f}
   alt:
     - {at: "ev:B.2.1", offset: +2f}
   target: S2.b1.visual[1]
   patch: {cut: in}
+  by: human
+# 挂在素材内偏移上：音乐怎么动都不受影响（G-13）
+ov3:
+  anchor: {at: "shot:B.3@+1s"}
+  target: S2.b2.visual[0]
+  patch: {exposure: "-0.2"}
   by: human

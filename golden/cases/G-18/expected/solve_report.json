@@ -30,15 +30,15 @@
     "S2.b1": {
       "body": 2540160000,
       "cost": {
-        "pause": 282240000,
+        "pause": 254016000,
         "trim": 352800000
       },
-      "dur": 3104640000,
+      "dur": 3076416000,
       "offset": 0,
-      "pause": 564480000,
+      "pause": 536256000,
       "reasons": [
-        "停顿拉长 0.4s：0.4s → 0.8s",
-        "visual[1] shot:B.2 慢放到上限 20% 仍缺 0.04s"
+        "停顿拉长 0.36s：0.4s → 0.76s",
+        "visual[1] shot:B.2 慢放 20.0%：素材 2.5s 撑满 3s"
       ],
       "visuals": [
         {
@@ -46,13 +46,13 @@
           "index": 0,
           "missing": 0,
           "offset": 0,
-          "rec_len": 3104640000,
-          "src_len": 3104640000
+          "rec_len": 3076416000,
+          "src_len": 3076416000
         },
         {
-          "fill": "short",
+          "fill": "retime",
           "index": 1,
-          "missing": 28224000,
+          "missing": 0,
           "offset": 959616000,
           "rec_len": 2116800000,
           "src_len": 1764000000
@@ -70,7 +70,7 @@
         "pause": 282240000
       },
       "dur": 2963520000,
-      "offset": 3104640000,
+      "offset": 3076416000,
       "pause": 705600000,
       "reasons": [
         "停顿拉长 0.4s：0.6s → 1s"
@@ -94,19 +94,20 @@
   },
   "conflicts": [
     {
+      "blocking": true,
       "code": "intent_under",
-      "max_total": 8326080000,
+      "max_total": 8297856000,
       "note": "语速不放慢；停顿和画面已拉到上限",
       "options": [
         {
-          "amount": 1058400000,
+          "amount": 1086624000,
           "id": "A",
           "op": "add",
           "target": "content",
           "term": "meaning"
         },
         {
-          "amount": 1058400000,
+          "amount": 1086624000,
           "id": "B",
           "op": "relax",
           "target": "intent.duration",
@@ -115,7 +116,36 @@
       ],
       "recommend": "A",
       "term": "intent",
-      "under": 1058400000
+      "under": 1086624000
+    },
+    {
+      "alt": [
+        {
+          "anchor": "ev:B.2.1",
+          "at": 4527129600,
+          "delta": 152409600,
+          "offset": 56448000
+        }
+      ],
+      "assignee": "human",
+      "blocking": false,
+      "code": "anchor_diverged",
+      "decidable": "judgment",
+      "kept": "A",
+      "note": "两种解释已经分开：先按主锚点保留，等人决定",
+      "options": [
+        {
+          "anchor": "bar:M1.2.b3",
+          "id": "A",
+          "op": "follow"
+        },
+        {
+          "anchor": "ev:B.2.1",
+          "id": "B",
+          "op": "follow"
+        }
+      ],
+      "override": "ov2"
     }
   ],
   "cost": [
@@ -129,7 +159,7 @@
     ],
     [
       "intent",
-      1058400000
+      1086624000
     ],
     [
       "meaning",
@@ -137,7 +167,7 @@
     ],
     [
       "declared_budget",
-      423360000
+      395136000
     ],
     [
       "cross_zone",
@@ -153,7 +183,7 @@
     ],
     [
       "pause",
-      846720000
+      818496000
     ],
     [
       "diff_from_prev",
@@ -166,18 +196,92 @@
     "min": 9384480000,
     "over": 0,
     "target": 9878400000,
-    "under": 1058400000,
+    "under": 1086624000,
     "within": false
   },
+  "music": {
+    "M1": {
+      "bars_used": 4,
+      "beats": [
+        "S2.b1",
+        "S2.b2"
+      ],
+      "end": 7902720000,
+      "span_end": 8297856000,
+      "start": 2257920000,
+      "tail_gap": 395136000
+    }
+  },
   "not_applied": [
-    "music:S2.b1",
-    "music:S2.b2",
-    "ov1",
-    "ov2",
-    "r:1",
+    "music.snap",
     "visual.cut_points"
   ],
+  "patches": {
+    "ov1": {
+      "alt": [],
+      "alt_coincide": false,
+      "anchor": "n:S2.1.w2",
+      "applied_at": 2681280000,
+      "at": 2681280000,
+      "by": "human",
+      "offset": 0,
+      "op": "attrs",
+      "resolved_by": null,
+      "status": "applied",
+      "target": "S2.b1.visual[1]"
+    },
+    "ov2": {
+      "alt": [
+        {
+          "anchor": "ev:B.2.1",
+          "at": 4527129600,
+          "delta": 152409600,
+          "offset": 56448000
+        }
+      ],
+      "alt_coincide": false,
+      "anchor": "bar:M1.2.b3",
+      "applied_at": 4374720000,
+      "at": 4374720000,
+      "by": "human",
+      "offset": 0,
+      "op": "cut_in",
+      "resolved_by": null,
+      "status": "applied",
+      "target": "S2.b1.visual[1]"
+    },
+    "ov3": {
+      "alt": [],
+      "alt_coincide": false,
+      "anchor": "shot:B.3@1s",
+      "applied_at": 6039936000,
+      "at": 6039936000,
+      "by": "human",
+      "offset": 0,
+      "op": "attrs",
+      "resolved_by": null,
+      "status": "applied",
+      "target": "S2.b2.visual[0]"
+    }
+  },
   "project_solver": "0.0.1",
+  "rules": {
+    "r:1": {
+      "by": "human",
+      "clips": [
+        {
+          "clip": "S2.b2/visual[0]",
+          "status": "no_strong_beat_nearby"
+        }
+      ],
+      "do": "cut_on: beat.strong",
+      "scope": {
+        "beat": "S2.b2",
+        "role": "b-roll",
+        "section": null
+      }
+    }
+  },
   "sections": {
     "S1": {
       "beats": [
@@ -187,6 +291,8 @@
       "budget": null,
       "budget_kind": "derived",
       "dur": 2257920000,
+      "frozen": false,
+      "hash": "8b44e16fc700aa25",
       "l4_absorbed": true,
       "lent": [],
       "natural": 1975680000,
@@ -201,24 +307,20 @@
       "borrowed": [],
       "budget": 5644800000,
       "budget_kind": "declared",
-      "dur": 6068160000,
+      "dur": 6039936000,
+      "frozen": false,
+      "hash": "7b4d738c3cb6e150",
       "l4_absorbed": true,
       "lent": [],
       "natural": 5503680000,
-      "over": 423360000,
+      "over": 395136000,
       "start": 2257920000
     }
   },
-  "solver": "zone-3",
+  "solver": "zone-5",
+  "solver_lock": null,
   "status": "conflict",
-  "total": 8326080000,
+  "total": 8297856000,
   "tts_resynth_needed": [],
-  "warnings": [
-    {
-      "beat": "S2.b1",
-      "code": "visual_shortfall",
-      "missing": 28224000,
-      "shot": "shot:B.2"
-    }
-  ]
+  "warnings": []
 }

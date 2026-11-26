@@ -5,7 +5,7 @@
     "den": 1,
     "num": 25
   },
-  "solver": "zone-3",
+  "solver": "zone-5",
   "tracks": {
     "A1": [
       {
@@ -39,6 +39,18 @@
         "src_out": 2257920000
       }
     ],
+    "A2": [
+      {
+        "id": "music/M1",
+        "origin": "S2.b1",
+        "rec_in": 1975680000,
+        "rec_out": 6209280000,
+        "speed_ppm": 1000000,
+        "src": "media/m1.wav",
+        "src_in": 0,
+        "src_out": 4233600000
+      }
+    ],
     "V1": [
       {
         "id": "S1.b1/visual[0]",
@@ -63,18 +75,31 @@
     ],
     "V2": [
       {
+        "attrs": {
+          "exposure": "+0.3"
+        },
         "id": "S2.b1/visual[1]",
         "origin": "S2.b1",
-        "rec_in": 2935296000,
+        "patches": [
+          "ov1",
+          "ov2"
+        ],
+        "rec_in": 4092480000,
         "rec_out": 4854528000,
         "speed_ppm": 919118,
         "src": "media/b.mp4",
-        "src_in": 2116800000,
+        "src_in": 3180388235,
         "src_out": 3880800000
       },
       {
+        "attrs": {
+          "exposure": "-0.2"
+        },
         "id": "S2.b2/visual[0]",
         "origin": "S2.b2",
+        "patches": [
+          "ov3"
+        ],
         "rec_in": 4854528000,
         "rec_out": 7535808000,
         "speed_ppm": 1000000,

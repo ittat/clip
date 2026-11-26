@@ -1,15 +1,19 @@
 //! 分层剪辑器 CLI（阶段 0）。
 //!
-//! 退出码：0 成功 / 1 硬约束冲突或用例失败 / 2 工程格式错误 / 3 内部错误
+//! 退出码：0 成功 / 1 硬约束冲突、用例失败或有差异 / 2 工程格式错误 / 3 内部错误
+//!
+//! 命令：compile · validate · explain · diff · determinism · golden run/bless ·
+//! freeze · unfreeze · lock accept/check
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
 use core_compile::{compile, CompileError, Status};
-use core_store::{write_build, SourceSet};
+use core_store::{remove_source, write_build, write_source, SourceSet, SOLVER_LOCK};
 use serde_json::json;
 
+mod diff;
 mod golden;
 
 pub const EXIT_CONFLICT: u8 = 1;
@@ -36,6 +40,49 @@ enum Cmd {
         #[command(subcommand)]
         cmd: GoldenCmd,
     },
+    /// 只加载和校验工程（引用、格式），不编译
+    Validate {
+        dir: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
+    /// 用人能读的方式说明求解结果：谁被压缩、谁被吸附、为什么
+    Explain {
+        dir: PathBuf,
+        /// 只展开这个段落
+        #[arg(long = "ref")]
+        section: Option<String>,
+    },
+    /// 比较两个工程的编译结果（退出码 0 相同 / 1 不同）
+    Diff {
+        a: PathBuf,
+        b: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
+    /// 对任意工程检查幂等、顺序无关、局部性
+    Determinism {
+        dir: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
+    /// 冻结段落：把它当前的片段存成 frozen/<段落>.json，之后编译原样输出
+    Freeze { dir: PathBuf, section: String },
+    /// 解冻段落：删除 frozen/<段落>.json
+    Unfreeze { dir: PathBuf, section: String },
+    /// 求解器版本锁
+    Lock {
+        #[command(subcommand)]
+        cmd: LockCmd,
+    },
+}
+
+#[derive(Subcommand)]
+enum LockCmd {
+    /// 用当前结果写 locks/solver.lock.json（确认求解器升级带来的变化）
+    Accept { dir: PathBuf },
+    /// 检查锁：求解器版本或区结果和锁不一致时退出码 1
+    Check { dir: PathBuf },
 }
 
 #[derive(Subcommand)]
@@ -72,6 +119,232 @@ fn main() -> ExitCode {
         Cmd::Golden {
             cmd: GoldenCmd::Bless { case, root },
         } => golden::bless(&root, &case),
+        Cmd::Validate { dir, json } => validate_cmd(&dir, json),
+        Cmd::Explain { dir, section } => explain_cmd(&dir, section.as_deref()),
+        Cmd::Diff { a, b, json } => diff::run(&a, &b, json),
+        Cmd::Determinism { dir, json } => golden::determinism(&dir, json),
+        Cmd::Freeze { dir, section } => freeze_cmd(&dir, &section),
+        Cmd::Unfreeze { dir, section } => unfreeze_cmd(&dir, &section),
+        Cmd::Lock {
+            cmd: LockCmd::Accept { dir },
+        } => lock_accept(&dir),
+        Cmd::Lock {
+            cmd: LockCmd::Check { dir },
+        } => lock_check(&dir),
+    }
+}
+
+fn read_src(dir: &Path) -> Result<SourceSet, ExitCode> {
+    SourceSet::read_dir(dir).map_err(|e| {
+        eprintln!("读取工程失败：{e}");
+        ExitCode::from(EXIT_INTERNAL)
+    })
+}
+
+fn compile_error(e: CompileError) -> ExitCode {
+    match e {
+        CompileError::Load(errs) => {
+            eprint!("{errs}");
+            ExitCode::from(EXIT_FORMAT)
+        }
+        CompileError::Usage(m) => {
+            eprintln!("{m}");
+            ExitCode::from(EXIT_FORMAT)
+        }
+        CompileError::Internal(m) => {
+            eprintln!("内部错误：{m}");
+            ExitCode::from(EXIT_INTERNAL)
+        }
+    }
+}
+
+fn validate_cmd(dir: &Path, json: bool) -> ExitCode {
+    let src = match read_src(dir) {
+        Ok(s) => s,
+        Err(c) => return c,
+    };
+    match core_store::load(&src) {
+        Ok(p) => {
+            let counts = json!({
+                "sections": p.sections.len(),
+                "beats": p.beats.len(),
+                "narration": p.narration.len(),
+                "overrides": p.overrides.len(),
+                "rules": p.rules.len(),
+                "frozen": p.frozen.len(),
+            });
+            if json {
+                println!("{}", json!({"status": "ok", "counts": counts}));
+            } else {
+                println!(
+                    "工程有效：{} 个段落、{} 个节拍、{} 句旁白、{} 个补丁、{} 条规则、{} 个冻结段",
+                    p.sections.len(),
+                    p.beats.len(),
+                    p.narration.len(),
+                    p.overrides.len(),
+                    p.rules.len(),
+                    p.frozen.len()
+                );
+            }
+            ExitCode::SUCCESS
+        }
+        Err(errs) => {
+            if json {
+                let items: Vec<_> = errs
+                    .0
+                    .iter()
+                    .map(
+                        |e| json!({"file": e.file, "at": e.at, "message": e.message, "fix": e.fix}),
+                    )
+                    .collect();
+                println!("{}", json!({"status": "format_error", "errors": items}));
+            } else {
+                eprint!("{errs}");
+                eprintln!("{} 个错误", errs.0.len());
+            }
+            ExitCode::from(EXIT_FORMAT)
+        }
+    }
+}
+
+fn explain_cmd(dir: &Path, section: Option<&str>) -> ExitCode {
+    let src = match read_src(dir) {
+        Ok(s) => s,
+        Err(c) => return c,
+    };
+    let out = match compile(&src) {
+        Ok(o) => o,
+        Err(e) => return compile_error(e),
+    };
+    let Some(bytes) = out.files.get(core_compile::REPORT) else {
+        eprintln!("内部错误：编译没有产出求解报告");
+        return ExitCode::from(EXIT_INTERNAL);
+    };
+    let report: serde_json::Value = match serde_json::from_slice(bytes) {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("内部错误：读不到求解报告：{e}");
+            return ExitCode::from(EXIT_INTERNAL);
+        }
+    };
+    if let Some(s) = section {
+        if report["sections"][s].is_null() {
+            eprintln!("段落 {s} 不存在");
+            return ExitCode::from(EXIT_FORMAT);
+        }
+    }
+    print!("{}", core_compile::explain(&report, section));
+    ExitCode::SUCCESS
+}
+
+fn freeze_cmd(dir: &Path, section: &str) -> ExitCode {
+    let src = match read_src(dir) {
+        Ok(s) => s,
+        Err(c) => return c,
+    };
+    match core_compile::freeze(&src, section) {
+        Ok((name, bytes)) => match write_source(dir, &name, &bytes) {
+            Ok(()) => {
+                println!("已冻结 {section}：写入 {}", dir.join(&name).display());
+                ExitCode::SUCCESS
+            }
+            Err(e) => {
+                eprintln!("写入 {name} 失败：{e}");
+                ExitCode::from(EXIT_INTERNAL)
+            }
+        },
+        Err(e) => compile_error(e),
+    }
+}
+
+fn unfreeze_cmd(dir: &Path, section: &str) -> ExitCode {
+    if let Err(e) = core_model::SectionId::parse(section) {
+        eprintln!("{e}");
+        return ExitCode::from(EXIT_FORMAT);
+    }
+    let name = format!("frozen/{section}.json");
+    match remove_source(dir, &name) {
+        Ok(()) => {
+            println!("已解冻 {section}");
+            ExitCode::SUCCESS
+        }
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            eprintln!("{section} 没有冻结");
+            ExitCode::from(EXIT_FORMAT)
+        }
+        Err(e) => {
+            eprintln!("删除 {name} 失败：{e}");
+            ExitCode::from(EXIT_INTERNAL)
+        }
+    }
+}
+
+fn lock_accept(dir: &Path) -> ExitCode {
+    let src = match read_src(dir) {
+        Ok(s) => s,
+        Err(c) => return c,
+    };
+    match core_compile::lock_file(&src) {
+        Ok(bytes) => match write_source(dir, SOLVER_LOCK, &bytes) {
+            Ok(()) => {
+                println!("已更新 {}", dir.join(SOLVER_LOCK).display());
+                ExitCode::SUCCESS
+            }
+            Err(e) => {
+                eprintln!("写入锁文件失败：{e}");
+                ExitCode::from(EXIT_INTERNAL)
+            }
+        },
+        Err(e) => compile_error(e),
+    }
+}
+
+fn lock_check(dir: &Path) -> ExitCode {
+    let src = match read_src(dir) {
+        Ok(s) => s,
+        Err(c) => return c,
+    };
+    let out = match compile(&src) {
+        Ok(o) => o,
+        Err(e) => return compile_error(e),
+    };
+    let Some(bytes) = out.files.get(core_compile::REPORT) else {
+        eprintln!("内部错误：编译没有产出求解报告");
+        return ExitCode::from(EXIT_INTERNAL);
+    };
+    let report: serde_json::Value = match serde_json::from_slice(bytes) {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("内部错误：读不到求解报告：{e}");
+            return ExitCode::from(EXIT_INTERNAL);
+        }
+    };
+    let lock = &report["solver_lock"];
+    if lock.is_null() {
+        println!("没有锁文件。运行 clip lock accept 生成");
+        return ExitCode::from(EXIT_CONFLICT);
+    }
+    let changed: Vec<&str> = lock["zones_changed"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|v| v.as_str())
+        .collect();
+    let version_ok = lock["version_matches"].as_bool() == Some(true);
+    if version_ok && changed.is_empty() {
+        println!("锁一致：求解器 {}", lock["solver"]);
+        ExitCode::SUCCESS
+    } else {
+        if !version_ok {
+            println!(
+                "求解器版本：锁里是 {}，当前是 {}",
+                lock["solver"], report["solver"]
+            );
+        }
+        if !changed.is_empty() {
+            println!("结果变化的区：{}", changed.join("、"));
+        }
+        ExitCode::from(EXIT_CONFLICT)
     }
 }
 

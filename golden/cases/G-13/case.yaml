@@ -1,0 +1,14 @@
+id: G-13
+title: 音乐入点后移一拍：挂在拍子上的锚点跟着走，挂在素材偏移上的不动
+kind: compile
+fixture: min_explainer
+expect_status: ok
+expect_anchor_delta: {ov2: 0.5s, ov3: 0s}
+# 120bpm 一拍 0.5s。去掉 ov2 的备选锚点，只看主锚点（拍子）怎么动
+overlay:
+  content.yaml:
+    beats:
+      S2.b1:
+        music: {cue: M1, fit: bars, start: 0.5s}
+  overrides.yaml:
+    ov2: {alt: null}

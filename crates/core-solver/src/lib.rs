@@ -14,7 +14,7 @@
 
 use core_model::{BeatId, Cost, SectionId, Tick, FLICKS_PER_SECOND};
 
-pub const SOLVER_VERSION: &str = "zone-3";
+pub const SOLVER_VERSION: &str = "zone-5";
 
 /// 慢放上限：成片时长最多比素材长 20%。
 pub const MAX_RETIME_PERCENT: i64 = 20;
@@ -70,6 +70,8 @@ pub struct ZoneInput {
     pub id: SectionId,
     pub budget: Option<Tick>,
     pub beats: Vec<BeatInput>,
+    /// 冻结段：固定长度的硬盒子，不参与任何伸缩，节拍不再求解
+    pub frozen: Option<Tick>,
 }
 
 /// 求解输入。`zones` 按成片顺序排列；`window` 是 L4 意图的时长区间。
@@ -172,8 +174,9 @@ pub struct ZonePlacement {
     pub over: Tick,
     pub borrowed: Vec<(SectionId, Tick)>,
     pub lent: Vec<(SectionId, Tick)>,
-    /// 是否为满足 L4 上限而被压缩
+    /// 是否为满足 L4 上下限而被压缩或拉长
     pub l4: bool,
+    pub frozen: bool,
     pub beats: Vec<BeatPlacement>,
 }
 
@@ -433,11 +436,29 @@ fn apply(b: &BeatInput, s: &mut BeatState, lever: Lever, x: Tick) -> Tick {
 /// 拉伸用的手段，代价从低到高：停顿（9）→ 画面（8）。不放慢语速。
 const STRETCH_LEVERS: [Lever; 2] = [Lever::Pause, Lever::Elastic];
 
+/// 弹性画面慢放到上限时，节拍最多能有多长（没有弹性画面时为 None）。
+fn visual_dur_cap(b: &BeatInput, s: &BeatState) -> Option<Tick> {
+    b.visuals
+        .iter()
+        .filter(|v| v.kind == VisualKind::Elastic)
+        .map(|v| scaled_offset(b, s.voice, v.offset) + retime_limit(v.have))
+        .min()
+}
+
+/// 拉长节拍不能让弹性画面撑不满：可拉伸量受画面上限约束。
 fn stretch_capacity(b: &BeatInput, s: &BeatState, lever: Lever) -> Tick {
-    match lever {
+    let own = match lever {
         Lever::Pause => b.pause.max - s.pause,
         Lever::Elastic if elastic_only(b) => elastic_max(b) - s.elastic,
         Lever::Elastic | Lever::Rate => Tick::ZERO,
+    };
+    match visual_dur_cap(b, s) {
+        Some(cap) => {
+            let cur = body(b, s) + s.pause;
+            let room = if cap > cur { cap - cur } else { Tick::ZERO };
+            own.min(room)
+        }
+        None => own,
     }
 }
 
@@ -474,6 +495,9 @@ fn stretch(
         let mut targets = Vec::new();
         let mut caps = Vec::new();
         for (zi, z) in input.zones.iter().enumerate() {
+            if z.frozen.is_some() {
+                continue;
+            }
             let mut zone_caps: Vec<Tick> = z
                 .beats
                 .iter()
@@ -529,6 +553,9 @@ fn distribute(need: Tick, caps: &[Tick]) -> Vec<Tick> {
 }
 
 fn zone_dur(z: &ZoneInput, states: &[BeatState]) -> Tick {
+    if let Some(d) = z.frozen {
+        return d;
+    }
     z.beats
         .iter()
         .zip(states)
@@ -692,7 +719,7 @@ pub fn solve(input: &SolveInput, _prev: Option<&SolveOutput>) -> SolveOutput {
 
     // 1. 区内消化：超出声明预算的段落先用自己的弹性
     for (zi, z) in input.zones.iter().enumerate() {
-        if let Some(budget) = z.budget {
+        if let (Some(budget), None) = (z.budget, z.frozen) {
             if naturals[zi] > budget {
                 let targets: Vec<(usize, usize)> = (0..z.beats.len()).map(|i| (zi, i)).collect();
                 absorb(input, &mut states, &targets, naturals[zi] - budget);
@@ -711,6 +738,7 @@ pub fn solve(input: &SolveInput, _prev: Option<&SolveOutput>) -> SolveOutput {
             .zones
             .iter()
             .enumerate()
+            .filter(|(_, z)| z.frozen.is_none())
             .flat_map(|(zi, z)| (0..z.beats.len()).map(move |i| (zi, i)))
             .collect();
         let need = total - max;
@@ -797,11 +825,15 @@ pub fn solve(input: &SolveInput, _prev: Option<&SolveOutput>) -> SolveOutput {
     for (zi, z) in input.zones.iter().enumerate() {
         let zone_start = cursor;
         let mut beats = Vec::with_capacity(z.beats.len());
-        for (b, s) in z.beats.iter().zip(&states[zi]) {
-            let p = place_beat(b, s, cursor, &mut hard);
-            cursor = cursor + p.dur;
-            cost = cost + p.cost;
-            beats.push(p);
+        if let Some(d) = z.frozen {
+            cursor = cursor + d;
+        } else {
+            for (b, s) in z.beats.iter().zip(&states[zi]) {
+                let p = place_beat(b, s, cursor, &mut hard);
+                cursor = cursor + p.dur;
+                cost = cost + p.cost;
+                beats.push(p);
+            }
         }
         zones.push(ZonePlacement {
             id: z.id.clone(),
@@ -813,6 +845,7 @@ pub fn solve(input: &SolveInput, _prev: Option<&SolveOutput>) -> SolveOutput {
             borrowed: name(&borrowed[zi]),
             lent: name(&lent[zi]),
             l4: l4[zi],
+            frozen: z.frozen.is_some(),
             beats,
         });
     }
@@ -827,65 +860,83 @@ pub fn solve(input: &SolveInput, _prev: Option<&SolveOutput>) -> SolveOutput {
     }
 }
 
-/// 所有可拉伸量用尽后（不放慢语速）全片的最大长度。
+/// 所有可拉伸量用尽后（不放慢语速，不让画面撑不满）全片的最大长度。
 pub fn max_total(input: &SolveInput) -> Tick {
     input.zones.iter().fold(Tick::ZERO, |acc, z| {
+        if let Some(d) = z.frozen {
+            return acc + d;
+        }
         z.beats.iter().fold(acc, |acc, b| {
-            let s = BeatState {
-                voice: b.voice,
-                elastic: elastic_max(b),
-                pause: b.pause.max,
-            };
+            let mut s = natural_state(b);
+            for lever in STRETCH_LEVERS {
+                let x = stretch_capacity(b, &s, lever);
+                stretch_apply(&mut s, lever, x);
+            }
             acc + body(b, &s) + s.pause
         })
     })
 }
 
-/// 冲突集里的元素：节拍主体由谁决定，或停顿。
+/// 冲突集里的元素：节拍主体由谁决定，或停顿，或整个冻结段。
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Part {
     Voice,
     Visual(usize),
     Elastic,
     Pause,
+    Frozen,
 }
 
-/// 每个节拍在所有弹性用尽时，各部分的最短长度。
+/// 每个节拍在所有弹性用尽时，各部分的最短长度。冻结段整体算一个元素（`beat` 为空）。
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MinElement {
-    pub beat: BeatId,
+    pub zone: SectionId,
+    pub beat: Option<BeatId>,
     pub part: Part,
     pub min: Tick,
 }
 
 pub fn min_elements(input: &SolveInput) -> Vec<MinElement> {
     let mut out = Vec::new();
-    for b in input.zones.iter().flat_map(|z| &z.beats) {
-        let s = min_state(b);
-        let len = body(b, &s);
-        if len > Tick::ZERO {
-            let part = if elastic_only(b) {
-                Part::Elastic
-            } else {
-                match (s.voice, locked_end(b, s.voice)) {
-                    (Some(v), Some((e, i))) if e > v => Part::Visual(i),
-                    (Some(_), _) => Part::Voice,
-                    (None, Some((_, i))) => Part::Visual(i),
-                    (None, None) => Part::Elastic,
-                }
-            };
+    for z in &input.zones {
+        if let Some(d) = z.frozen {
             out.push(MinElement {
-                beat: b.id.clone(),
-                part,
-                min: len,
+                zone: z.id.clone(),
+                beat: None,
+                part: Part::Frozen,
+                min: d,
             });
+            continue;
         }
-        if b.pause.min > Tick::ZERO {
-            out.push(MinElement {
-                beat: b.id.clone(),
-                part: Part::Pause,
-                min: b.pause.min,
-            });
+        for b in &z.beats {
+            let s = min_state(b);
+            let len = body(b, &s);
+            if len > Tick::ZERO {
+                let part = if elastic_only(b) {
+                    Part::Elastic
+                } else {
+                    match (s.voice, locked_end(b, s.voice)) {
+                        (Some(v), Some((e, i))) if e > v => Part::Visual(i),
+                        (Some(_), _) => Part::Voice,
+                        (None, Some((_, i))) => Part::Visual(i),
+                        (None, None) => Part::Elastic,
+                    }
+                };
+                out.push(MinElement {
+                    zone: z.id.clone(),
+                    beat: Some(b.id.clone()),
+                    part,
+                    min: len,
+                });
+            }
+            if b.pause.min > Tick::ZERO {
+                out.push(MinElement {
+                    zone: z.id.clone(),
+                    beat: Some(b.id.clone()),
+                    part: Part::Pause,
+                    min: b.pause.min,
+                });
+            }
         }
     }
     out
@@ -929,6 +980,7 @@ mod tests {
             id: SectionId::parse(id).unwrap(),
             budget,
             beats,
+            frozen: None,
         }
     }
 
@@ -1187,6 +1239,34 @@ mod tests {
     }
 
     #[test]
+    fn pause_stretch_never_outruns_visuals() {
+        let input = SolveInput {
+            zones: vec![zone(
+                "S1",
+                None,
+                vec![beat(
+                    "S1.b1",
+                    Some(s(2)),
+                    // 画面最多撑到 1s + 1.2s = 2.2s
+                    vec![vis(s(1), s(1), VisualKind::Elastic)],
+                    PauseInput {
+                        natural: ms(100),
+                        min: Tick::ZERO,
+                        max: ms(800),
+                    },
+                )],
+            )],
+            window: (s(5), s(10)),
+        };
+        let out = solve(&input, None);
+        let b = &out.zones[0].beats[0];
+        assert_eq!(b.pause, ms(200), "停顿只拉到画面撑得住的地方");
+        assert_eq!(b.visuals[0].fill, FillKind::Retime);
+        assert_eq!(max_total(&input), ms(2200));
+        assert_eq!(out.intent_under, ms(2800));
+    }
+
+    #[test]
     fn elastic_only_beat_stretches_by_retime() {
         let input = SolveInput {
             zones: vec![zone(
@@ -1207,6 +1287,43 @@ mod tests {
         assert_eq!(b.visuals[0].fill, FillKind::Retime);
         assert_eq!(b.elastic_shrink, Tick::ZERO);
         assert_eq!(out.cost.trim, to_cost(s(1)), "拉长只按慢放计一次");
+    }
+
+    #[test]
+    fn frozen_zone_is_a_hard_box() {
+        let mut frozen = zone(
+            "S1",
+            None,
+            vec![beat("S1.b1", Some(s(2)), vec![], pause(400, 200))],
+        );
+        frozen.frozen = Some(s(3));
+        let input = SolveInput {
+            zones: vec![
+                frozen,
+                zone(
+                    "S2",
+                    None,
+                    vec![beat("S2.b1", Some(s(2)), vec![], pause(400, 200))],
+                ),
+            ],
+            window: (Tick::ZERO, ms(4500)),
+        };
+        let out = solve(&input, None);
+        assert_eq!(out.zones[0].dur, s(3));
+        assert!(out.zones[0].frozen);
+        assert!(out.zones[0].beats.is_empty());
+        assert_eq!(out.zones[1].start, s(3));
+        // 超出 L4 上限 0.9s：只能压 S2（停顿 0.2s + 语速），冻结段不动
+        assert!(out.zones[1].dur < ms(2400));
+        assert!(out.intent_over > Tick::ZERO);
+        let elems = min_elements(&input);
+        let frozen_min: Vec<Tick> = elems
+            .iter()
+            .filter(|e| e.part == Part::Frozen)
+            .map(|e| e.min)
+            .collect();
+        assert_eq!(frozen_min, vec![s(3)], "冻结段整体算一个冲突元素");
+        assert_eq!(max_total(&input), s(3) + ms(2800));
     }
 
     #[test]

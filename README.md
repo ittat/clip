@@ -37,7 +37,39 @@ cargo run -p clip -- golden run
 - 编译 API 的输入是内存里的 `SourceSet`，不读文件系统、不读 `build/`
 - CI 在 Linux、macOS、Windows 上跑同一套黄金用例；`.gitattributes` 统一 LF
 
-## 当前进度：PR 4 段落预算与偏短拉伸（`solver: zone-3`）
+## 阶段 0 完成（`solver: zone-5`）
+
+### CLI
+| 命令 | 作用 |
+|---|---|
+| `clip compile <dir>` | 编译：只读源文件，只写 `build/` |
+| `clip validate <dir>` | 只加载和校验工程，不编译；错误带位置和修复建议 |
+| `clip explain <dir> [--ref S2]` | 把求解报告整理成人能读的说明 |
+| `clip diff <a> <b>` | 比较两个工程的编译结果（按区、代价项、片段、冲突） |
+| `clip determinism <dir>` | 对任意工程跑幂等、顺序无关、局部性检查 |
+| `clip golden run / bless` | 黄金用例 |
+| `clip freeze / unfreeze <dir> <段落>` | 冻结 / 解冻段落 |
+| `clip lock accept / check <dir>` | 求解器版本锁 |
+
+所有命令都支持 `--json`（`explain` 除外），退出码：0 成功 / 1 冲突、失败或有差异 / 2 格式错误 / 3 内部错误。
+
+区哈希包含补丁和规则之后的最终片段：补丁或规则的逻辑变了，锁也能察觉。
+
+### 第 2 轮 规则、冻结、锁
+
+- **规则**（`rules.yaml`）：阶段 0 支持 `do: {cut_on: beat.strong}`，范围可写 `section` / `beat` / `role`，具体优先于一般。补丁之后执行：画面入点吸附到最近的强拍（4/4 的第 1、3 拍），距离不超过半拍，只向后裁头且不能露出空白；**不碰挂了剪切补丁的片段和冻结段**。补丁的备选锚点分开时，唯一覆盖它的规则可以在已记录的几种解释里选一个
+- **冻结**：`clip freeze <dir> S1` 把 S1 当前的片段存成 `frozen/S1.json`；编译时 S1 是固定长度的硬盒子，原样输出、整体平移；补丁和规则都不碰它。冲突方案里可能出现“请人解冻”。`clip unfreeze` 删除它。音乐不随段落冻结
+- **锁**：`clip lock accept <dir>` 记录求解器版本和每个区的结果哈希（`locks/solver.lock.json`）；版本变了时报告给出 `solver_changed` 和变化的区。编译从不更新锁文件。`clip lock check` 检查一致性
+
+### 第 1 轮 锚点与补丁
+
+- **音乐**：从第一个用到它的节拍开始，从素材的 `first_bar` 起播；`music.start` 可以延后进入；`fit: bars` 时播放长度向下取整到整小节
+- **锚点**：词、事件、素材偏移、拍子都换算成时间线位置（标记 `mk:` 还不支持）
+- **补丁**：求解之后应用，不反过来影响求解。`cut: in / out` 裁头/裁尾，画面帧位置不变；其他属性原样传给渲染器
+- **备选锚点**：主锚点和 `alt` 相差不到半帧视为重合；分开时报 `anchor_diverged`，按主锚点保留
+- **拉伸**：停顿拉长不会让弹性画面撑不满
+
+### PR 4 段落预算与偏短拉伸
 
 - **区内**：段落超出声明预算时，按代价从低到高消化：停顿（9）→ 纯画面节拍的主体（8）→ 语速 ±8%（7）
 - **全片**：超出 L4 上限时，在所有区剩余的弹性里继续消化；仍超出记为第 3 项，`status: conflict`，退出码 1
@@ -51,6 +83,6 @@ cargo run -p clip -- golden run
 
 ## 已知限制（都会出现在 `solve_report.json` 的 `not_applied` 里）
 
-- 音乐、补丁、规则还没有执行
+- 音乐切点吸附强拍（`music.snap`）还没做；冻结段里的音乐不会随段落保存
 - 规划模式（还没有内容时按 `role` 权重分配预算）推迟到阶段 1
 - `visual.cut_points`：截取画面时直接取前段，还没有对齐可剪点

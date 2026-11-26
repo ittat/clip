@@ -9,7 +9,7 @@ use std::fmt;
 use core_model::*;
 use serde::de::DeserializeOwned;
 
-use crate::source::SourceSet;
+use crate::source::{is_frozen_file, SourceSet, SOLVER_LOCK};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LoadError {
@@ -190,6 +190,8 @@ mod raw {
     pub struct MusicUse {
         pub cue: String,
         pub fit: String,
+        #[serde(default)]
+        pub start: Option<String>,
     }
 
     #[derive(Deserialize)]
@@ -302,6 +304,46 @@ mod raw {
         #[serde(default)]
         pub examples: Vec<String>,
     }
+
+    /// `frozen/<段落>.json`：由 `clip freeze` 生成的规范化 JSON，时间是 flicks 整数。
+    #[derive(Deserialize)]
+    #[serde(deny_unknown_fields)]
+    pub struct Frozen {
+        pub format: u32,
+        pub section: String,
+        pub solver: String,
+        pub dur: i64,
+        pub clips: Vec<FrozenClip>,
+    }
+
+    #[derive(Deserialize)]
+    #[serde(deny_unknown_fields)]
+    pub struct FrozenClip {
+        pub id: String,
+        pub origin: String,
+        pub track: String,
+        pub src: String,
+        pub src_in: i64,
+        pub src_out: i64,
+        pub rec_in: i64,
+        pub rec_out: i64,
+        #[serde(default)]
+        pub speed_ppm: Option<i64>,
+        #[serde(default)]
+        pub attrs: BTreeMap<String, String>,
+        #[serde(default)]
+        pub patches: Vec<String>,
+        #[serde(default)]
+        pub rules: Vec<String>,
+    }
+
+    #[derive(Deserialize)]
+    #[serde(deny_unknown_fields)]
+    pub struct SolverLock {
+        pub format: u32,
+        pub solver: String,
+        pub zones: BTreeMap<String, String>,
+    }
 }
 
 fn parse_yaml<T: DeserializeOwned>(
@@ -382,6 +424,7 @@ pub fn load(src: &SourceSet) -> Result<Project, LoadErrors> {
     let overrides: Option<BTreeMap<String, raw::Override>> =
         parse_yaml(src, &mut cx, "overrides.yaml", false);
     let rules: Option<BTreeMap<String, raw::Rule>> = parse_yaml(src, &mut cx, "rules.yaml", false);
+    let solver_lock: Option<raw::SolverLock> = parse_json(src, &mut cx, SOLVER_LOCK, false);
     // 阶段 0 只检查语法
     let _: Option<serde_yaml_ng::Value> = parse_yaml(src, &mut cx, "voices.yaml", false);
     let _: Option<serde_yaml_ng::Value> = parse_yaml(src, &mut cx, "queue.yaml", false);
@@ -411,7 +454,11 @@ pub fn load(src: &SourceSet) -> Result<Project, LoadErrors> {
     let overrides = overrides
         .map(|o| build_overrides(&mut cx, o, &fps, &tts, &media, &beats))
         .unwrap_or_default();
-    let rules = rules.map(|r| build_rules(&mut cx, r)).unwrap_or_default();
+    let rules = rules
+        .map(|r| build_rules(&mut cx, r, &sections, &beats, &overrides))
+        .unwrap_or_default();
+    let frozen = build_frozen(&mut cx, src, &sections);
+    let solver_lock = solver_lock.and_then(|l| build_solver_lock(&mut cx, l));
 
     if !cx.errors.is_empty() {
         return Err(LoadErrors(cx.errors));
@@ -427,6 +474,8 @@ pub fn load(src: &SourceSet) -> Result<Project, LoadErrors> {
         tts,
         overrides,
         rules,
+        frozen,
+        solver_lock,
     })
 }
 
@@ -947,8 +996,18 @@ fn build_beats(
                         cx.err(F, &at, format!("音乐 {c} 不在素材索引中"), None);
                     }
                 }
+                let start = match m.start.as_deref() {
+                    None => None,
+                    Some(s) => match cx.dur(F, &format!("{at}.start"), s, fps) {
+                        Some(t) if t < Tick::ZERO => {
+                            cx.err(F, &format!("{at}.start"), "start 不能为负", None);
+                            None
+                        }
+                        other => other,
+                    },
+                };
                 match (cue, fit) {
-                    (Some(cue), Some(fit)) => Some(MusicUse { cue, fit }),
+                    (Some(cue), Some(fit)) => Some(MusicUse { cue, fit, start }),
                     _ => None,
                 }
             }
@@ -1100,6 +1159,73 @@ fn anchor_spec(
     ok.then_some(AnchorSpec { at: anchor, offset })
 }
 
+/// `S2.b1.visual[1]` / `S2.b1.voice` → （节拍, 元素）。
+fn parse_target(s: &str) -> Option<(BeatId, Slot)> {
+    if let Some(beat) = s.strip_suffix(".voice") {
+        return BeatId::parse(beat).ok().map(|b| (b, Slot::Voice));
+    }
+    let (beat, rest) = s.split_once(".visual[")?;
+    let idx = rest.strip_suffix(']')?;
+    if idx.is_empty() || !idx.bytes().all(|c| c.is_ascii_digit()) {
+        return None;
+    }
+    let i: usize = idx.parse().ok()?;
+    BeatId::parse(beat).ok().map(|b| (b, Slot::Visual(i)))
+}
+
+fn yaml_scalar(v: &serde_yaml_ng::Value) -> Option<String> {
+    match v {
+        serde_yaml_ng::Value::String(s) => Some(s.clone()),
+        serde_yaml_ng::Value::Number(n) => Some(n.to_string()),
+        serde_yaml_ng::Value::Bool(b) => Some(b.to_string()),
+        _ => None,
+    }
+}
+
+fn parse_patch(cx: &mut Ctx, at: &str, v: &serde_yaml_ng::Value) -> Option<Patch> {
+    const F: &str = "overrides.yaml";
+    let serde_yaml_ng::Value::Mapping(m) = v else {
+        cx.err(
+            F,
+            at,
+            "patch 必须是映射",
+            Some("例如 {cut: in} 或 {exposure: \"+0.3\"}"),
+        );
+        return None;
+    };
+    let mut attrs = BTreeMap::new();
+    for (k, x) in m {
+        let (Some(k), Some(x)) = (yaml_scalar(k), yaml_scalar(x)) else {
+            cx.err(F, at, "patch 的键和值都必须是标量", None);
+            return None;
+        };
+        attrs.insert(k, x);
+    }
+    match attrs.get("cut").map(String::as_str) {
+        None => Some(Patch::Attrs(attrs)),
+        Some(edge) if attrs.len() > 1 => {
+            cx.err(
+                F,
+                at,
+                format!("cut: {edge} 不能和其他属性写在同一个补丁里"),
+                None,
+            );
+            None
+        }
+        Some("in") => Some(Patch::CutIn),
+        Some("out") => Some(Patch::CutOut),
+        Some(other) => {
+            cx.err(
+                F,
+                at,
+                format!("未知的 cut `{other}`"),
+                Some("可选：in、out"),
+            );
+            None
+        }
+    }
+}
+
 fn build_overrides(
     cx: &mut Ctx,
     raw: BTreeMap<String, raw::Override>,
@@ -1124,14 +1250,44 @@ fn build_overrides(
                 alt.push(s);
             }
         }
-        if !beats.keys().any(|b| o.target.starts_with(&format!("{b}."))) {
-            cx.err(
-                F,
-                &format!("{k}.target"),
-                format!("目标 `{}` 不指向任何节拍", o.target),
-                Some("例如 S2.b1.visual[1]"),
-            );
-        }
+        let target = match parse_target(&o.target) {
+            Some((beat, slot)) => match beats.get(&beat) {
+                None => {
+                    cx.err(
+                        F,
+                        &format!("{k}.target"),
+                        format!("节拍 {beat} 不存在"),
+                        None,
+                    );
+                    None
+                }
+                Some(b) => {
+                    let ok = match slot {
+                        Slot::Voice => b.voice.is_some(),
+                        Slot::Visual(i) => i < b.visual.len(),
+                    };
+                    if !ok {
+                        cx.err(
+                            F,
+                            &format!("{k}.target"),
+                            format!("`{}` 在节拍里不存在", o.target),
+                            None,
+                        );
+                    }
+                    ok.then_some((beat, slot))
+                }
+            },
+            None => {
+                cx.err(
+                    F,
+                    &format!("{k}.target"),
+                    format!("无法解析目标 `{}`", o.target),
+                    Some("例如 S2.b1.visual[1] 或 S2.b1.voice"),
+                );
+                None
+            }
+        };
+        let patch = parse_patch(cx, &format!("{k}.patch"), &o.patch);
         if !valid_author(&o.by) {
             cx.err(
                 F,
@@ -1140,12 +1296,18 @@ fn build_overrides(
                 Some("可选：human、ai、ai:<名字>"),
             );
         }
+        let (Some((beat, slot)), Some(patch)) = (target, patch) else {
+            continue;
+        };
         out.insert(
             id,
             Override {
                 anchor,
                 alt,
                 target: o.target,
+                beat,
+                slot,
+                patch,
                 by: o.by,
             },
         );
@@ -1153,21 +1315,281 @@ fn build_overrides(
     out
 }
 
-fn build_rules(cx: &mut Ctx, raw: BTreeMap<String, raw::Rule>) -> BTreeSet<RuleId> {
-    let mut out = BTreeSet::new();
-    for (k, r) in raw {
-        let Some(id) = cx.id("rules.yaml", &k, RuleId::parse(&k)) else {
+fn parse_scope(
+    cx: &mut Ctx,
+    k: &str,
+    v: &serde_yaml_ng::Value,
+    sections: &BTreeMap<SectionId, Section>,
+    beats: &BTreeMap<BeatId, Beat>,
+) -> Option<RuleScope> {
+    const F: &str = "rules.yaml";
+    let at = format!("{k}.scope");
+    let serde_yaml_ng::Value::Mapping(m) = v else {
+        cx.err(
+            F,
+            &at,
+            "scope 必须是映射",
+            Some("例如 {section: S2, role: b-roll}"),
+        );
+        return None;
+    };
+    let mut scope = RuleScope::default();
+    let mut ok = true;
+    for (key, val) in m {
+        let (Some(key), Some(val)) = (yaml_scalar(key), yaml_scalar(val)) else {
+            cx.err(F, &at, "scope 的键和值都必须是标量", None);
+            ok = false;
             continue;
         };
+        let kat = format!("{at}.{key}");
+        match key.as_str() {
+            "section" => match cx.id(F, &kat, SectionId::parse(&val)) {
+                Some(s) if sections.contains_key(&s) => scope.section = Some(s),
+                Some(s) => {
+                    cx.err(F, &kat, format!("段落 {s} 不存在"), None);
+                    ok = false;
+                }
+                None => ok = false,
+            },
+            "beat" => match cx.id(F, &kat, BeatId::parse(&val)) {
+                Some(b) if beats.contains_key(&b) => scope.beat = Some(b),
+                Some(b) => {
+                    cx.err(F, &kat, format!("节拍 {b} 不存在"), None);
+                    ok = false;
+                }
+                None => ok = false,
+            },
+            "role" => match val.as_str() {
+                "a-roll" => scope.role = Some(Role::ARoll),
+                "b-roll" => scope.role = Some(Role::BRoll),
+                other => {
+                    cx.err(
+                        F,
+                        &kat,
+                        format!("未知角色 `{other}`"),
+                        Some("可选：a-roll、b-roll"),
+                    );
+                    ok = false;
+                }
+            },
+            other => {
+                cx.err(
+                    F,
+                    &kat,
+                    format!("未知的范围 `{other}`"),
+                    Some("可选：section、beat、role"),
+                );
+                ok = false;
+            }
+        }
+    }
+    if let (Some(s), Some(b)) = (&scope.section, &scope.beat) {
+        if !sections[s].beats.contains(b) {
+            cx.err(F, &at, format!("节拍 {b} 不属于段落 {s}"), None);
+            ok = false;
+        }
+    }
+    ok.then_some(scope)
+}
+
+fn parse_action(cx: &mut Ctx, k: &str, v: &serde_yaml_ng::Value) -> Option<RuleAction> {
+    let at = format!("{k}.do");
+    if let serde_yaml_ng::Value::Mapping(m) = v {
+        if m.len() == 1 {
+            if let Some((key, val)) = m.iter().next() {
+                if yaml_scalar(key).as_deref() == Some("cut_on")
+                    && yaml_scalar(val).as_deref() == Some("beat.strong")
+                {
+                    return Some(RuleAction::CutOnStrongBeat);
+                }
+            }
+        }
+    }
+    cx.err(
+        "rules.yaml",
+        &at,
+        "不支持的规则动作",
+        Some("阶段 0 只支持 do: {cut_on: beat.strong}"),
+    );
+    None
+}
+
+fn build_rules(
+    cx: &mut Ctx,
+    raw: BTreeMap<String, raw::Rule>,
+    sections: &BTreeMap<SectionId, Section>,
+    beats: &BTreeMap<BeatId, Beat>,
+    overrides: &BTreeMap<OverrideId, Override>,
+) -> BTreeMap<RuleId, Rule> {
+    const F: &str = "rules.yaml";
+    let mut out = BTreeMap::new();
+    for (k, r) in raw {
+        let Some(id) = cx.id(F, &k, RuleId::parse(&k)) else {
+            continue;
+        };
+        let scope = parse_scope(cx, &k, &r.scope, sections, beats);
+        let action = parse_action(cx, &k, &r.action);
         if !valid_author(&r.by) {
             cx.err(
-                "rules.yaml",
+                F,
                 &format!("{k}.by"),
                 format!("未知作者 `{}`", r.by),
                 Some("可选：human、ai、ai:<名字>"),
             );
         }
-        out.insert(id);
+        let mut examples = Vec::new();
+        for (i, e) in r.examples.iter().enumerate() {
+            let at = format!("{k}.examples[{i}]");
+            if let Some(o) = cx.id(F, &at, OverrideId::parse(e)) {
+                if overrides.contains_key(&o) {
+                    examples.push(o);
+                } else {
+                    cx.err(F, &at, format!("补丁 {o} 不存在"), None);
+                }
+            }
+        }
+        if let (Some(scope), Some(action)) = (scope, action) {
+            out.insert(
+                id,
+                Rule {
+                    scope,
+                    action,
+                    by: r.by,
+                    examples,
+                },
+            );
+        }
     }
     out
+}
+
+fn build_frozen(
+    cx: &mut Ctx,
+    src: &SourceSet,
+    sections: &BTreeMap<SectionId, Section>,
+) -> BTreeMap<SectionId, Frozen> {
+    let names: Vec<String> = src
+        .iter()
+        .map(|(n, _)| n.to_string())
+        .filter(|n| is_frozen_file(n))
+        .collect();
+    let mut out = BTreeMap::new();
+    for name in names {
+        let Some(f) = parse_json::<raw::Frozen>(src, cx, &name, true) else {
+            continue;
+        };
+        let stem = &name["frozen/".len()..name.len() - ".json".len()];
+        if f.format != 1 {
+            cx.err(
+                &name,
+                "format",
+                format!("不支持的格式版本 {}", f.format),
+                None,
+            );
+            continue;
+        }
+        let Some(sid) = cx.id(&name, "section", SectionId::parse(&f.section)) else {
+            continue;
+        };
+        if sid.as_str() != stem {
+            cx.err(
+                &name,
+                "section",
+                format!("文件名是 {stem}，内容写的是 {sid}"),
+                None,
+            );
+            continue;
+        }
+        let Some(sec) = sections.get(&sid) else {
+            cx.err(
+                &name,
+                "section",
+                format!("段落 {sid} 不存在"),
+                Some("删除这个冻结文件，或用 clip unfreeze"),
+            );
+            continue;
+        };
+        if f.dur <= 0 {
+            cx.err(&name, "dur", "冻结段的时长必须为正", None);
+            continue;
+        }
+        let mut clips = Vec::new();
+        let mut ok = true;
+        for (i, c) in f.clips.iter().enumerate() {
+            let at = format!("clips[{i}]");
+            let Some(origin) = cx.id(&name, &format!("{at}.origin"), BeatId::parse(&c.origin))
+            else {
+                ok = false;
+                continue;
+            };
+            if !sec.beats.contains(&origin) {
+                cx.err(&name, &at, format!("节拍 {origin} 不属于段落 {sid}"), None);
+                ok = false;
+            }
+            if !["A1", "V1", "V2"].contains(&c.track.as_str()) {
+                cx.err(
+                    &name,
+                    &format!("{at}.track"),
+                    format!("未知轨道 `{}`", c.track),
+                    Some("可选：A1、V1、V2"),
+                );
+                ok = false;
+            }
+            if c.rec_in < 0 || c.rec_in > c.rec_out || c.rec_out > f.dur || c.src_in > c.src_out {
+                cx.err(
+                    &name,
+                    &at,
+                    "片段时间不合法（超出冻结段，或入点晚于出点）",
+                    None,
+                );
+                ok = false;
+            }
+            clips.push(FrozenClip {
+                id: c.id.clone(),
+                origin,
+                track: c.track.clone(),
+                src: c.src.clone(),
+                src_in: Tick(c.src_in),
+                src_out: Tick(c.src_out),
+                rec_in: Tick(c.rec_in),
+                rec_out: Tick(c.rec_out),
+                attrs: c.attrs.clone(),
+                patches: c.patches.clone(),
+                rules: c.rules.clone(),
+            });
+        }
+        if ok {
+            out.insert(
+                sid,
+                Frozen {
+                    dur: Tick(f.dur),
+                    solver: f.solver,
+                    clips,
+                },
+            );
+        }
+    }
+    out
+}
+
+fn build_solver_lock(cx: &mut Ctx, l: raw::SolverLock) -> Option<SolverLock> {
+    if l.format != 1 {
+        cx.err(
+            SOLVER_LOCK,
+            "format",
+            format!("不支持的格式版本 {}", l.format),
+            None,
+        );
+        return None;
+    }
+    let mut zones = BTreeMap::new();
+    for (k, h) in l.zones {
+        if let Some(sid) = cx.id(SOLVER_LOCK, &format!("zones.{k}"), SectionId::parse(&k)) {
+            zones.insert(sid, h);
+        }
+    }
+    Some(SolverLock {
+        solver: l.solver,
+        zones,
+    })
 }

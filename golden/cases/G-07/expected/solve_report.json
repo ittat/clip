@@ -90,7 +90,37 @@
       }
     }
   },
-  "conflicts": [],
+  "conflicts": [
+    {
+      "alt": [
+        {
+          "anchor": "ev:B.2.1",
+          "at": 3964949333,
+          "delta": -127530667,
+          "offset": 56448000
+        }
+      ],
+      "assignee": "human",
+      "blocking": false,
+      "code": "anchor_diverged",
+      "decidable": "judgment",
+      "kept": "A",
+      "note": "两种解释已经分开：先按主锚点保留，等人决定",
+      "options": [
+        {
+          "anchor": "bar:M1.2.b3",
+          "id": "A",
+          "op": "follow"
+        },
+        {
+          "anchor": "ev:B.2.1",
+          "id": "B",
+          "op": "follow"
+        }
+      ],
+      "override": "ov2"
+    }
+  ],
   "cost": [
     [
       "hard",
@@ -142,15 +172,89 @@
     "under": 0,
     "within": true
   },
+  "music": {
+    "M1": {
+      "bars_used": 3,
+      "beats": [
+        "S2.b1",
+        "S2.b2"
+      ],
+      "end": 6209280000,
+      "span_end": 6700586667,
+      "start": 1975680000,
+      "tail_gap": 491306667
+    }
+  },
   "not_applied": [
-    "music:S2.b1",
-    "music:S2.b2",
-    "ov1",
-    "ov2",
-    "r:1",
+    "music.snap",
     "visual.cut_points"
   ],
+  "patches": {
+    "ov1": {
+      "alt": [],
+      "alt_coincide": false,
+      "anchor": "n:S2.1.w2",
+      "applied_at": 2367680000,
+      "at": 2367680000,
+      "by": "human",
+      "offset": 0,
+      "op": "attrs",
+      "resolved_by": null,
+      "status": "applied",
+      "target": "S2.b1.visual[1]"
+    },
+    "ov2": {
+      "alt": [
+        {
+          "anchor": "ev:B.2.1",
+          "at": 3964949333,
+          "delta": -127530667,
+          "offset": 56448000
+        }
+      ],
+      "alt_coincide": false,
+      "anchor": "bar:M1.2.b3",
+      "applied_at": 4092480000,
+      "at": 4092480000,
+      "by": "human",
+      "offset": 0,
+      "op": "cut_in",
+      "resolved_by": null,
+      "status": "applied",
+      "target": "S2.b1.visual[1]"
+    },
+    "ov3": {
+      "alt": [],
+      "alt_coincide": false,
+      "anchor": "shot:B.3@1s",
+      "applied_at": 5174400000,
+      "at": 5174400000,
+      "by": "human",
+      "offset": 0,
+      "op": "attrs",
+      "resolved_by": null,
+      "status": "applied",
+      "target": "S2.b2.visual[0]"
+    }
+  },
   "project_solver": "0.0.1",
+  "rules": {
+    "r:1": {
+      "by": "human",
+      "clips": [
+        {
+          "clip": "S2.b2/visual[0]",
+          "status": "no_strong_beat_nearby"
+        }
+      ],
+      "do": "cut_on: beat.strong",
+      "scope": {
+        "beat": "S2.b2",
+        "role": "b-roll",
+        "section": null
+      }
+    }
+  },
   "sections": {
     "S1": {
       "beats": [
@@ -160,6 +264,8 @@
       "budget": null,
       "budget_kind": "derived",
       "dur": 1975680000,
+      "frozen": false,
+      "hash": "8d7090790b5fcc71",
       "l4_absorbed": false,
       "lent": [],
       "natural": 1975680000,
@@ -175,6 +281,8 @@
       "budget": 4233600000,
       "budget_kind": "declared",
       "dur": 4724906667,
+      "frozen": false,
+      "hash": "e874a443dc6ad069",
       "l4_absorbed": false,
       "lent": [],
       "natural": 5503680000,
@@ -182,7 +290,8 @@
       "start": 1975680000
     }
   },
-  "solver": "zone-3",
+  "solver": "zone-5",
+  "solver_lock": null,
   "status": "ok",
   "total": 6700586667,
   "tts_resynth_needed": [

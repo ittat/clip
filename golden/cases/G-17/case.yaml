@@ -1,0 +1,18 @@
+id: G-17
+title: 同 G-14，但规则覆盖 ov2：规则在补丁的两种解释里选拍子，不产生待决项
+kind: compile
+fixture: min_explainer
+expect_status: ok
+forbid_conflict_codes: [anchor_diverged]
+expect_anchor_delta: {ov2: 0.25s}
+expect_report:
+  - {path: [patches, ov2, resolved_by], equals: "r:1"}
+  - {path: [patches, ov2, offset], equals: 0}
+  - {path: [patches, ov2, status], equals: applied}
+overlay:
+  content.yaml:
+    beats:
+      S2.b1:
+        music: {cue: M1, fit: bars, start: 0.25s}
+  rules.yaml:
+    "r:1": {scope: {beat: S2.b1, role: b-roll}}

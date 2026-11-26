@@ -1,0 +1,282 @@
+{
+  "beats": {
+    "S1.b1": {
+      "body": 1693440000,
+      "cost": {},
+      "dur": 1975680000,
+      "offset": 0,
+      "pause": 282240000,
+      "reasons": [],
+      "visuals": [
+        {
+          "fill": "cut",
+          "index": 0,
+          "missing": 0,
+          "offset": 0,
+          "rec_len": 1975680000,
+          "src_len": 1975680000
+        }
+      ],
+      "voice": {
+        "len": 1693440000,
+        "natural": 1693440000,
+        "speed_ppm": 1000000
+      }
+    },
+    "S2.b1": {
+      "body": 2540160000,
+      "cost": {
+        "trim": 98784000
+      },
+      "dur": 2822400000,
+      "offset": 0,
+      "pause": 282240000,
+      "reasons": [
+        "visual[1] shot:B.2 慢放 5.6%：素材 2.5s 撑满 2.64s"
+      ],
+      "visuals": [
+        {
+          "fill": "cut",
+          "index": 0,
+          "missing": 0,
+          "offset": 0,
+          "rec_len": 2822400000,
+          "src_len": 2822400000
+        },
+        {
+          "fill": "retime",
+          "index": 1,
+          "missing": 0,
+          "offset": 959616000,
+          "rec_len": 1862784000,
+          "src_len": 1764000000
+        }
+      ],
+      "voice": {
+        "len": 2540160000,
+        "natural": 2540160000,
+        "speed_ppm": 1000000
+      }
+    },
+    "S2.b2": {
+      "body": 2257920000,
+      "cost": {},
+      "dur": 2681280000,
+      "offset": 2822400000,
+      "pause": 423360000,
+      "reasons": [],
+      "visuals": [
+        {
+          "fill": "cut",
+          "index": 0,
+          "missing": 0,
+          "offset": 0,
+          "rec_len": 2681280000,
+          "src_len": 2681280000
+        }
+      ],
+      "voice": {
+        "len": 2257920000,
+        "natural": 2257920000,
+        "speed_ppm": 1000000
+      }
+    }
+  },
+  "conflicts": [
+    {
+      "assignee": "human",
+      "blocking": false,
+      "code": "solver_changed",
+      "decidable": "judgment",
+      "from": "zone-3",
+      "note": "求解器版本变了：列出的区结果和确认时不同。确认后运行 clip lock accept；锁文件不会自动更新",
+      "to": "zone-5",
+      "zones_changed": [
+        "S1",
+        "S2"
+      ]
+    }
+  ],
+  "cost": [
+    [
+      "hard",
+      0
+    ],
+    [
+      "human_lock",
+      0
+    ],
+    [
+      "intent",
+      0
+    ],
+    [
+      "meaning",
+      0
+    ],
+    [
+      "declared_budget",
+      0
+    ],
+    [
+      "cross_zone",
+      0
+    ],
+    [
+      "rate",
+      0
+    ],
+    [
+      "trim",
+      98784000
+    ],
+    [
+      "pause",
+      0
+    ],
+    [
+      "diff_from_prev",
+      0
+    ]
+  ],
+  "format": 1,
+  "intent": {
+    "max": 8537760000,
+    "min": 6985440000,
+    "over": 0,
+    "target": 7761600000,
+    "under": 0,
+    "within": true
+  },
+  "music": {
+    "M1": {
+      "bars_used": 3,
+      "beats": [
+        "S2.b1",
+        "S2.b2"
+      ],
+      "end": 6209280000,
+      "span_end": 7479360000,
+      "start": 1975680000,
+      "tail_gap": 1270080000
+    }
+  },
+  "not_applied": [
+    "music.snap",
+    "visual.cut_points"
+  ],
+  "patches": {
+    "ov1": {
+      "alt": [],
+      "alt_coincide": false,
+      "anchor": "n:S2.1.w2",
+      "applied_at": 2399040000,
+      "at": 2399040000,
+      "by": "human",
+      "offset": 0,
+      "op": "attrs",
+      "resolved_by": null,
+      "status": "applied",
+      "target": "S2.b1.visual[1]"
+    },
+    "ov2": {
+      "alt": [
+        {
+          "anchor": "ev:B.2.1",
+          "at": 4094512128,
+          "delta": 2032128,
+          "offset": 56448000
+        }
+      ],
+      "alt_coincide": true,
+      "anchor": "bar:M1.2.b3",
+      "applied_at": 4092480000,
+      "at": 4092480000,
+      "by": "human",
+      "offset": 0,
+      "op": "cut_in",
+      "resolved_by": null,
+      "status": "applied",
+      "target": "S2.b1.visual[1]"
+    },
+    "ov3": {
+      "alt": [],
+      "alt_coincide": false,
+      "anchor": "shot:B.3@1s",
+      "applied_at": 5503680000,
+      "at": 5503680000,
+      "by": "human",
+      "offset": 0,
+      "op": "attrs",
+      "resolved_by": null,
+      "status": "applied",
+      "target": "S2.b2.visual[0]"
+    }
+  },
+  "project_solver": "0.0.1",
+  "rules": {
+    "r:1": {
+      "by": "human",
+      "clips": [
+        {
+          "clip": "S2.b2/visual[0]",
+          "status": "aligned"
+        }
+      ],
+      "do": "cut_on: beat.strong",
+      "scope": {
+        "beat": "S2.b2",
+        "role": "b-roll",
+        "section": null
+      }
+    }
+  },
+  "sections": {
+    "S1": {
+      "beats": [
+        "S1.b1"
+      ],
+      "borrowed": [],
+      "budget": null,
+      "budget_kind": "derived",
+      "dur": 1975680000,
+      "frozen": false,
+      "hash": "8d7090790b5fcc71",
+      "l4_absorbed": false,
+      "lent": [],
+      "natural": 1975680000,
+      "over": null,
+      "start": 0
+    },
+    "S2": {
+      "beats": [
+        "S2.b1",
+        "S2.b2"
+      ],
+      "borrowed": [],
+      "budget": 5644800000,
+      "budget_kind": "declared",
+      "dur": 5503680000,
+      "frozen": false,
+      "hash": "bd2d119a46c81373",
+      "l4_absorbed": false,
+      "lent": [],
+      "natural": 5503680000,
+      "over": 0,
+      "start": 1975680000
+    }
+  },
+  "solver": "zone-5",
+  "solver_lock": {
+    "solver": "zone-3",
+    "version_matches": false,
+    "zones_changed": [
+      "S1",
+      "S2"
+    ]
+  },
+  "status": "ok",
+  "total": 7479360000,
+  "tts_resynth_needed": [],
+  "warnings": []
+}

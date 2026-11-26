@@ -9,10 +9,12 @@
 | `idempotent` | 连续编译 3 次，并把 `build/` 产物混入源文件集合，结果必须一致 |
 | `shuffle` | 用多个种子打乱 YAML 映射的键顺序并重新序列化，结果必须一致 |
 | `tick_roundtrip` | 时间刻度往返与帧累加无漂移 |
+| `freeze` | 先冻结 `freeze` 里的段落，再叠加 overlay：冻结段的片段必须逐字节不变 |
+| `rule_effect` | 对比叠加 `revert` 前后：只有 `expect_moved_clips` 变化，`expect_untouched_clips` 完全相同 |
 | `locality` | 对比 overlay 前后，按区统计变化（段落整体平移不算），不超过 `max_changed_zones` |
 
 用例可以写 `overlay` 在样例工程上叠加修改（JSON merge-patch：映射递归合并，列表和标量整体替换，`null` 删除键），不用复制整个工程。
-`compile` 用例还可以写 `expect_status`、`forbid_option_targets`（冲突选项里不能出现的目标）、`expect_zero_costs` / `expect_nonzero_costs`（代价项必须为 0 / 大于 0）。
+`compile` 用例还可以写 `expect_status`、`forbid_option_targets`（冲突选项里不能出现的目标）、`expect_zero_costs` / `expect_nonzero_costs`（代价项必须为 0 / 大于 0）、`expect_conflict_codes`（冲突里必须出现的 code）、`expect_anchor_delta`（与不叠加 overlay 的样例工程相比，补丁锚点在时间线上移动的量）、`forbid_conflict_codes`、`expect_report`（报告里某个路径的值）。compile 用例还会检查编译只写了 `build/`。
 
 更新期望输出：
 
