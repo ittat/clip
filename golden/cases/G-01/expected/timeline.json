@@ -5,7 +5,7 @@
     "den": 1,
     "num": 25
   },
-  "solver": "naive-0",
+  "solver": "beat-1",
   "tracks": {
     "A1": [
       {
@@ -13,6 +13,7 @@
         "origin": "S1.b1",
         "rec_in": 0,
         "rec_out": 1693440000,
+        "speed_ppm": 1000000,
         "src": "gen/n_S1.1.wav",
         "src_in": 0,
         "src_out": 1693440000
@@ -22,6 +23,7 @@
         "origin": "S2.b1",
         "rec_in": 1975680000,
         "rec_out": 4515840000,
+        "speed_ppm": 1000000,
         "src": "gen/n_S2.1.wav",
         "src_in": 0,
         "src_out": 2540160000
@@ -31,6 +33,7 @@
         "origin": "S2.b2",
         "rec_in": 4798080000,
         "rec_out": 7056000000,
+        "speed_ppm": 1000000,
         "src": "gen/n_S2.2.wav",
         "src_in": 0,
         "src_out": 2257920000
@@ -42,6 +45,7 @@
         "origin": "S1.b1",
         "rec_in": 0,
         "rec_out": 1975680000,
+        "speed_ppm": 1000000,
         "src": "media/a.mp4",
         "src_in": 0,
         "src_out": 1975680000
@@ -51,9 +55,10 @@
         "origin": "S2.b1",
         "rec_in": 1975680000,
         "rec_out": 4798080000,
+        "speed_ppm": 1000000,
         "src": "media/a.mp4",
-        "src_in": 0,
-        "src_out": 2822400000
+        "src_in": 14112000000,
+        "src_out": 16934400000
       }
     ],
     "V2": [
@@ -61,7 +66,8 @@
         "id": "S2.b1/visual[1]",
         "origin": "S2.b1",
         "rec_in": 2935296000,
-        "rec_out": 4699296000,
+        "rec_out": 4798080000,
+        "speed_ppm": 946969,
         "src": "media/b.mp4",
         "src_in": 2116800000,
         "src_out": 3880800000
@@ -71,6 +77,7 @@
         "origin": "S2.b2",
         "rec_in": 4798080000,
         "rec_out": 7479360000,
+        "speed_ppm": 1000000,
         "src": "media/b.mp4",
         "src_in": 8467200000,
         "src_out": 11148480000

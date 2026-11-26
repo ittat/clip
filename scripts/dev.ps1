@@ -11,7 +11,7 @@ Set-Location $root
 
 # 用 cmd 重定向：保留 cargo 原始的 UTF-8 字节，避免 PowerShell 5.1 转成 UTF-16
 $steps = @(
-    @{ name = "1_fmt";    cmd = "cargo fmt --all --check" },
+    @{ name = "1_fmt";    cmd = "cargo fmt --all" },   # 本地直接格式化；CI 仍用 --check 把关
     @{ name = "2_clippy"; cmd = "cargo clippy --workspace --all-targets -- -D warnings" },
     @{ name = "3_test";   cmd = "cargo test --workspace" },
     @{ name = "4_golden"; cmd = "cargo run -q -p clip -- golden run" }

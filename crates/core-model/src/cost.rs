@@ -50,6 +50,26 @@ impl Cost {
     }
 }
 
+impl std::ops::Add for Cost {
+    type Output = Cost;
+
+    /// 逐项相加（饱和），用于把各节拍的代价汇总成全片代价。
+    fn add(self, o: Cost) -> Cost {
+        Cost {
+            hard: self.hard.saturating_add(o.hard),
+            human_lock: self.human_lock.saturating_add(o.human_lock),
+            intent: self.intent.saturating_add(o.intent),
+            meaning: self.meaning.saturating_add(o.meaning),
+            declared_budget: self.declared_budget.saturating_add(o.declared_budget),
+            cross_zone: self.cross_zone.saturating_add(o.cross_zone),
+            rate: self.rate.saturating_add(o.rate),
+            trim: self.trim.saturating_add(o.trim),
+            pause: self.pause.saturating_add(o.pause),
+            diff_from_prev: self.diff_from_prev.saturating_add(o.diff_from_prev),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
