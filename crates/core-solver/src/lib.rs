@@ -212,12 +212,17 @@ fn to_cost(t: Tick) -> u64 {
     u64::try_from(t.flicks()).unwrap_or(0)
 }
 
-/// 播放速度（ppm）：素材时长 / 成片时长 × 1e6，向下取整。
+/// 播放速度（ppm）：素材时长 / 成片时长 × 1e6，四舍五入到最近的整数。
+///
+/// 旁白最短时长 `voice_min` 向上取整，保证真实速度不超过 +8%；
+/// 这里四舍五入，所以语速上限显示为整 1,080,000，而不是 1,079,999。
 pub fn speed_ppm(src_len: Tick, rec_len: Tick) -> i64 {
     if rec_len.flicks() <= 0 {
         return UNIT_SPEED;
     }
-    let v = i128::from(src_len.flicks()) * i128::from(UNIT_SPEED) / i128::from(rec_len.flicks());
+    let n = i128::from(src_len.flicks()) * i128::from(UNIT_SPEED);
+    let d = i128::from(rec_len.flicks());
+    let v = (2 * n + d).div_euclid(2 * d);
     i64::try_from(v).unwrap_or(UNIT_SPEED)
 }
 
@@ -831,6 +836,24 @@ mod tests {
         assert_eq!(retime_limit(s(5)), s(6));
         assert_eq!(voice_min(ms(3600)), Tick(2_352_000_000));
         assert!(speed_ppm(ms(3600), voice_min(ms(3600))) <= UNIT_SPEED + 80_000);
+    }
+
+    #[test]
+    fn speed_rounds_to_nearest() {
+        assert_eq!(
+            speed_ppm(ms(3200), voice_min(ms(3200))),
+            UNIT_SPEED + 80_000
+        );
+        assert_eq!(
+            speed_ppm(ms(3600), voice_min(ms(3600))),
+            UNIT_SPEED + 80_000
+        );
+        assert_eq!(speed_ppm(ms(2500), ms(2640)), 946_970);
+        assert_eq!(speed_ppm(s(1), s(1)), UNIT_SPEED);
+        // 任何旁白在上限处都不超过 +8%
+        for n in [1_i64, 7, 1234, 3_333_333, 705_600_001] {
+            assert!(speed_ppm(Tick(n * 97), voice_min(Tick(n * 97))) <= UNIT_SPEED + 80_000);
+        }
     }
 
     #[test]

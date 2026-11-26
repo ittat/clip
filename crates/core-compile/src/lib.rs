@@ -11,6 +11,9 @@ use core_solver::{
 use core_store::{canon, load, LoadErrors, SourceSet};
 use serde_json::{json, Value};
 
+/// 这些段落里的句子仍可删除，但推荐顺序排在“放宽 L4”之后。
+pub const PROTECTED_ROLES: &[&str] = &["opening", "closing"];
+
 pub const TIMELINE: &str = "build/timeline.json";
 pub const REPORT: &str = "build/solve_report.json";
 
@@ -265,6 +268,11 @@ fn percent_text(pm: i64) -> String {
     format!("{}.{}%", pm / 10, pm % 10)
 }
 
+/// 速度增量（ppm）→ 千分比，四舍五入。
+fn ppm_to_permille(delta_ppm: i64) -> i64 {
+    (delta_ppm + 500).div_euclid(1000)
+}
+
 /// 本节拍里每一项非零代价的原因。
 fn reasons(p: &Project, pl: &BeatPlacement) -> Vec<String> {
     let b = &p.beats[&pl.id];
@@ -284,7 +292,7 @@ fn reasons(p: &Project, pl: &BeatPlacement) -> Vec<String> {
         if v.len < v.natural {
             out.push(format!(
                 "语速 +{}：旁白 {} → {}（需要重新合成 TTS）",
-                percent_text((v.speed_ppm() - UNIT_SPEED) / 1000),
+                percent_text(ppm_to_permille(v.speed_ppm() - UNIT_SPEED)),
                 human(v.natural),
                 human(v.len)
             ));
@@ -396,13 +404,29 @@ struct Opt {
     term: &'static str,
     /// remove / unlock：能省下的时长；relax：需要放宽的时长；set：设成的值
     amount: Tick,
+    /// 句子所在段落是开场或结尾：代价仍是第 4 项，但推荐顺序排在放宽 L4 之后
+    protected_role: Option<String>,
 }
 
-fn term_rank(term: &str) -> u8 {
-    match term {
-        "meaning" => 0,
-        "intent" => 1,
-        _ => 2,
+impl Opt {
+    fn new(op: &'static str, target: String, term: &'static str, amount: Tick) -> Opt {
+        Opt {
+            op,
+            target,
+            term,
+            amount,
+            protected_role: None,
+        }
+    }
+}
+
+/// 推荐顺序：删句 < 放宽 L4 < 删开场/结尾的句子 < 动人工锁定。
+fn option_rank(o: &Opt) -> u8 {
+    match (o.term, &o.protected_role) {
+        ("meaning", None) => 0,
+        ("intent", _) => 1,
+        ("meaning", Some(_)) => 2,
+        _ => 3,
     }
 }
 
@@ -415,12 +439,16 @@ fn option_id(i: usize) -> String {
 }
 
 fn finish_options(mut opts: Vec<Opt>) -> (Vec<Value>, Value) {
-    opts.sort_by_key(|o| (term_rank(o.term), o.amount, o.target.clone()));
+    opts.sort_by_key(|o| (option_rank(o), o.amount, o.target.clone()));
     let values: Vec<Value> = opts
         .iter()
         .enumerate()
         .map(|(i, o)| {
-            json!({"id": option_id(i), "op": o.op, "target": o.target, "term": o.term, "amount": t(o.amount)})
+            let mut v = json!({"id": option_id(i), "op": o.op, "target": o.target, "term": o.term, "amount": t(o.amount)});
+            if let (Some(role), Some(m)) = (&o.protected_role, v.as_object_mut()) {
+                m.insert("protected_role".to_string(), json!(role));
+            }
+            v
         })
         .collect();
     let recommend = values.first().map_or(Value::Null, |v| v["id"].clone());
@@ -445,18 +473,8 @@ fn hard_conflicts(out: &SolveOutput) -> Vec<Value> {
         .map(|h| {
             let target = format!("{}.visual[{}]", h.beat, h.visual);
             let (options, recommend) = finish_options(vec![
-                Opt {
-                    op: "set",
-                    target: format!("{target}.len"),
-                    term: "human_lock",
-                    amount: h.have,
-                },
-                Opt {
-                    op: "unlock",
-                    target: target.clone(),
-                    term: "human_lock",
-                    amount: h.len - h.have,
-                },
+                Opt::new("set", format!("{target}.len"), "human_lock", h.have),
+                Opt::new("unlock", target.clone(), "human_lock", h.len - h.have),
             ]);
             json!({
                 "code": "fixed_exceeds_source",
@@ -495,46 +513,49 @@ fn intent_conflict(p: &Project, input: &SolveInput, out: &SolveOutput) -> Option
 
     let must: BTreeSet<NarrationId> = p.intent.must.iter().map(|r| r.narration.clone()).collect();
     let mut opts = Vec::new();
-    for b in input.zones.iter().flat_map(|z| &z.beats) {
-        if let Some(v) = &p.beats[&b.id].voice {
-            if !must.contains(&v.narration) {
-                let without = BeatInput {
-                    voice: None,
-                    ..b.clone()
-                };
-                let saves = body_min(b) - body_min(&without);
-                if saves >= over {
-                    opts.push(Opt {
-                        op: "remove",
-                        target: v.narration.to_string(),
-                        term: "meaning",
-                        amount: saves,
-                    });
+    for z in &input.zones {
+        let role = &p.sections[&z.id].role;
+        let protected = PROTECTED_ROLES.contains(&role.as_str());
+        for b in &z.beats {
+            if let Some(v) = &p.beats[&b.id].voice {
+                if !must.contains(&v.narration) {
+                    let without = BeatInput {
+                        voice: None,
+                        ..b.clone()
+                    };
+                    let saves = body_min(b) - body_min(&without);
+                    if saves >= over {
+                        let mut o = Opt::new("remove", v.narration.to_string(), "meaning", saves);
+                        if protected {
+                            o.protected_role = Some(role.clone());
+                        }
+                        opts.push(o);
+                    }
                 }
             }
-        }
-        for (i, vi) in b.visuals.iter().enumerate() {
-            if matches!(vi.kind, VisualKind::Fixed(_)) {
-                let mut unlocked = b.clone();
-                unlocked.visuals[i].kind = VisualKind::Elastic;
-                let saves = body_min(b) - body_min(&unlocked);
-                if saves >= over {
-                    opts.push(Opt {
-                        op: "unlock",
-                        target: format!("{}.visual[{i}]", b.id),
-                        term: "human_lock",
-                        amount: saves,
-                    });
+            for (i, vi) in b.visuals.iter().enumerate() {
+                if matches!(vi.kind, VisualKind::Fixed(_)) {
+                    let mut unlocked = b.clone();
+                    unlocked.visuals[i].kind = VisualKind::Elastic;
+                    let saves = body_min(b) - body_min(&unlocked);
+                    if saves >= over {
+                        opts.push(Opt::new(
+                            "unlock",
+                            format!("{}.visual[{i}]", b.id),
+                            "human_lock",
+                            saves,
+                        ));
+                    }
                 }
             }
         }
     }
-    opts.push(Opt {
-        op: "relax",
-        target: "intent.duration".to_string(),
-        term: "intent",
-        amount: over,
-    });
+    opts.push(Opt::new(
+        "relax",
+        "intent.duration".to_string(),
+        "intent",
+        over,
+    ));
     let (options, recommend) = finish_options(opts);
     Some(json!({
         "code": "intent_over",
@@ -675,29 +696,30 @@ mod tests {
 
     #[test]
     fn option_order_and_ids() {
+        let mut opening = Opt::new("remove", "n:S1.1".into(), "meaning", Tick(1));
+        opening.protected_role = Some("opening".into());
         let (opts, rec) = finish_options(vec![
-            Opt {
-                op: "relax",
-                target: "intent.duration".into(),
-                term: "intent",
-                amount: Tick(5),
-            },
-            Opt {
-                op: "unlock",
-                target: "S1.b1.visual[0]".into(),
-                term: "human_lock",
-                amount: Tick(1),
-            },
-            Opt {
-                op: "remove",
-                target: "n:S1.1".into(),
-                term: "meaning",
-                amount: Tick(9),
-            },
+            Opt::new("relax", "intent.duration".into(), "intent", Tick(5)),
+            Opt::new("unlock", "S1.b1.visual[0]".into(), "human_lock", Tick(1)),
+            opening,
+            Opt::new("remove", "n:S2.2".into(), "meaning", Tick(9)),
         ]);
-        let ops: Vec<&str> = opts.iter().map(|o| o["op"].as_str().unwrap()).collect();
-        assert_eq!(ops, vec!["remove", "relax", "unlock"]);
+        let targets: Vec<&str> = opts.iter().map(|o| o["target"].as_str().unwrap()).collect();
+        assert_eq!(
+            targets,
+            vec!["n:S2.2", "intent.duration", "n:S1.1", "S1.b1.visual[0]"]
+        );
+        assert_eq!(opts[2]["protected_role"], json!("opening"));
+        assert!(opts[0].get("protected_role").is_none());
         assert_eq!(opts[0]["id"], json!("A"));
         assert_eq!(rec, json!("A"));
+    }
+
+    #[test]
+    fn rate_percent_rounds() {
+        assert_eq!(percent_text(ppm_to_permille(79_999)), "8.0%");
+        assert_eq!(percent_text(ppm_to_permille(80_000)), "8.0%");
+        assert_eq!(percent_text(ppm_to_permille(12_449)), "1.2%");
+        assert_eq!(percent_text(ppm_to_permille(12_500)), "1.3%");
     }
 }
