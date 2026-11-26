@@ -1,22 +1,66 @@
 {
   "beats": {
     "S1.b1": {
+      "cost": {},
       "dur": 1975680000,
       "hard": 1693440000,
       "pause": 282240000,
-      "start": 0
+      "reasons": [],
+      "start": 0,
+      "visuals": [
+        {
+          "fill": "trim",
+          "index": 0,
+          "missing": 0,
+          "rec_len": 1975680000,
+          "src_len": 1975680000
+        }
+      ]
     },
     "S2.b1": {
+      "cost": {
+        "trim": 98784000
+      },
       "dur": 2822400000,
       "hard": 2540160000,
       "pause": 282240000,
-      "start": 1975680000
+      "reasons": [
+        "visual[1] shot:B.2 慢放 5.6%：素材 2.5s 撑满 2.64s"
+      ],
+      "start": 1975680000,
+      "visuals": [
+        {
+          "fill": "trim",
+          "index": 0,
+          "missing": 0,
+          "rec_len": 2822400000,
+          "src_len": 2822400000
+        },
+        {
+          "fill": "retime",
+          "index": 1,
+          "missing": 0,
+          "rec_len": 1862784000,
+          "src_len": 1764000000
+        }
+      ]
     },
     "S2.b2": {
+      "cost": {},
       "dur": 2681280000,
       "hard": 2257920000,
       "pause": 423360000,
-      "start": 4798080000
+      "reasons": [],
+      "start": 4798080000,
+      "visuals": [
+        {
+          "fill": "trim",
+          "index": 0,
+          "missing": 0,
+          "rec_len": 2681280000,
+          "src_len": 2681280000
+        }
+      ]
     }
   },
   "cost": [
@@ -50,7 +94,7 @@
     ],
     [
       "trim",
-      0
+      98784000
     ],
     [
       "pause",
@@ -71,11 +115,12 @@
   "not_applied": [
     "music:S2.b1",
     "music:S2.b2",
-    "override:ov1",
-    "override:ov2",
-    "rule:r:1",
+    "ov1",
+    "ov2",
+    "r:1",
     "intent.must",
-    "pause.flex"
+    "pause.flex",
+    "visual.cut_points"
   ],
   "project_solver": "0.0.1",
   "sections": {
@@ -92,15 +137,8 @@
       "over": -141120000
     }
   },
-  "solver": "naive-0",
+  "solver": "beat-1",
   "status": "ok",
   "total": 7479360000,
-  "warnings": [
-    {
-      "beat": "S2.b1",
-      "code": "visual_shortfall",
-      "missing": 98784000,
-      "shot": "shot:B.2"
-    }
-  ]
+  "warnings": []
 }

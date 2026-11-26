@@ -37,8 +37,15 @@ cargo run -p clip -- golden run
 - 编译 API 的输入是内存里的 `SourceSet`，不读文件系统、不读 `build/`
 - CI 在 Linux、macOS、Windows 上跑同一套黄金用例；`.gitattributes` 统一 LF
 
-## PR 1 的已知限制（都会出现在 `solve_report.json` 里）
+## 当前进度：PR 2 节拍求解（`solver: beat-1`）
 
-- `not_applied`：音乐、补丁、规则、`must`、停顿弹性都还没有执行
-- `warnings`：`visual_shortfall`——画面不够长时不做填充，只报告缺口（S2.b1 的 B-roll 缺 0.14s）
-- `cost` 全为 0
+- 节拍主体 = 最长的硬元素；弹性画面填满到节拍结束：截取 / 慢放（≤20%）/ 报缺口
+- 慢放多出的时长计入代价第 8 项（trim，单位 flicks）；每个节拍在报告里列出非零代价和原因
+- 时间线片段带 `speed_ppm`（1,000,000 = 原速）
+- 全局检查：同一素材区间被重复使用时报 `source_reuse`
+
+## 已知限制（都会出现在 `solve_report.json` 的 `not_applied` 里）
+
+- 音乐、补丁、规则、`must` 还没有执行
+- `pause.flex`：停顿取自然长度，压缩/拉伸在 PR 3 的超时消化里做
+- `visual.cut_points`：截取画面时直接取前段，还没有对齐可剪点

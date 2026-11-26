@@ -7,7 +7,7 @@ beats:
   S2.b1:
     voice: {narration: "n:S2.1", fit: rigid}
     visual:
-      - {shot: "shot:A.1", role: a-roll}
+      - {shot: "shot:A.2", role: a-roll}   # 不与 S1 重复使用 a.mp4 的同一段
       - {shot: "shot:B.2", role: b-roll, fit: fill, from: "n:S2.1.w5"}   # 从“一开始”切 B-roll
     music: {cue: M1, fit: bars}
     pause: {after: 0.4s, flex: 0.2s..0.8s}
