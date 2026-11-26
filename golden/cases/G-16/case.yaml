@@ -1,0 +1,29 @@
+id: G-16
+title: 新增一条规则再撤销：规则不碰人的补丁，撤销后恢复原样
+kind: rule_effect
+fixture: min_explainer
+# 音乐后移 0.25s；S2.b2 的 B-roll 入点 6.8s 离强拍 7.05s 正好半拍，下面垫一层 A-roll。
+# r:2 覆盖 S2 的全部 B-roll：S2.b2 的 B-roll 吸附到强拍；S2.b1 的 B-roll 挂了人的剪切补丁 ov2，不动
+overlay:
+  content.yaml:
+    beats:
+      S2.b1:
+        music: {cue: M1, fit: bars, start: 0.25s}
+      S2.b2:
+        visual:
+          - {shot: "shot:B.3", role: b-roll, fit: fill}
+          - {shot: "shot:A.3", role: a-roll}
+  media/index.yaml:
+    shots:
+      "shot:A.3": {src: media/a.mp4, in: 40s, out: 60s, desc: {景别: 中, 主体: 主持人, 动作: 讲述, 环境: 演播室}}
+  rules.yaml:
+    "r:1": null
+    "r:2":
+      scope: {section: S2, role: b-roll}
+      do: {cut_on: beat.strong}
+      by: human
+revert:
+  rules.yaml:
+    "r:2": null
+expect_moved_clips: ["S2.b2/visual[0]"]
+expect_untouched_clips: ["S2.b1/visual[1]"]

@@ -5,4 +5,7 @@ mod load;
 mod source;
 
 pub use load::{load, LoadError, LoadErrors};
-pub use source::{write_build, SourceSet, SOURCE_FILES};
+pub use source::{
+    is_frozen_file, is_source_file, remove_source, write_build, write_source, SourceSet,
+    SOLVER_LOCK, SOURCE_FILES,
+};

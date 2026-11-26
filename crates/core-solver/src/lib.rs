@@ -12,15 +12,18 @@
 //!
 //! 每一步按各节拍的可用量按比例分配，余数按成片顺序逐个补 1 flick，结果确定。
 
-use core_model::{BeatId, Cost, SectionId, Tick, FLICKS_PER_SECOND};
+use core_model::{BeatId, Cost, MusicId, SectionId, Tick, FLICKS_PER_SECOND};
 
-pub const SOLVER_VERSION: &str = "zone-3";
+pub const SOLVER_VERSION: &str = "zone-6";
 
 /// 慢放上限：成片时长最多比素材长 20%。
 pub const MAX_RETIME_PERCENT: i64 = 20;
 
 /// 语速上限：最多加快 8%。
 pub const MAX_RATE_PERCENT: i64 = 8;
+
+/// 段落切点吸附强拍、片尾对齐小节线时，停顿最多调整 ±0.3 秒。
+pub const MAX_SNAP: Tick = Tick(FLICKS_PER_SECOND * 3 / 10);
 
 /// 纯画面节拍的主体最短压到 1 秒（素材本身更短时取素材长度）。
 pub const MIN_ELASTIC_BODY: Tick = Tick(FLICKS_PER_SECOND);
@@ -70,6 +73,8 @@ pub struct ZoneInput {
     pub id: SectionId,
     pub budget: Option<Tick>,
     pub beats: Vec<BeatInput>,
+    /// 冻结段：固定长度的硬盒子，不参与任何伸缩，节拍不再求解
+    pub frozen: Option<Tick>,
 }
 
 /// 求解输入。`zones` 按成片顺序排列；`window` 是 L4 意图的时长区间。
@@ -77,6 +82,90 @@ pub struct ZoneInput {
 pub struct SolveInput {
     pub zones: Vec<ZoneInput>,
     pub window: (Tick, Tick),
+    /// 音乐：用于段落切点吸附强拍、片尾对齐小节线
+    pub music: Vec<MusicInput>,
+}
+
+/// 一段音乐在求解器里的样子。冻结段里的节拍不算“用到”。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MusicInput {
+    pub id: MusicId,
+    /// 第一个、最后一个用到它的节拍：（区序号, 节拍序号）
+    pub first: (usize, usize),
+    pub last: (usize, usize),
+    /// 相对第一个节拍开始延后多久进入
+    pub start: Tick,
+    /// 一拍的长度
+    pub beat: Tick,
+    pub meter: u32,
+    pub bars: u32,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum SnapKind {
+    /// 段落切点 → 最近的强拍
+    Section,
+    /// 最后一个用到音乐的节拍结束点 → 最近的小节线
+    MusicEnd,
+}
+
+impl SnapKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            SnapKind::Section => "section",
+            SnapKind::MusicEnd => "music_end",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SnapStatus {
+    Snapped,
+    /// 已经在拍子上
+    Aligned,
+    /// 距离超过 ±0.3s
+    TooFar,
+    /// 超出停顿的 flex 区间
+    PauseLimit,
+    /// 拉长后弹性画面会撑不满
+    VisualLimit,
+    /// 会超出声明预算
+    Budget,
+    /// 会超出 L4 区间
+    Intent,
+    /// 切点前是冻结段
+    Frozen,
+    /// 全片有阻塞冲突，不做吸附
+    Conflict,
+}
+
+impl SnapStatus {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            SnapStatus::Snapped => "snapped",
+            SnapStatus::Aligned => "aligned",
+            SnapStatus::TooFar => "too_far",
+            SnapStatus::PauseLimit => "pause_limit",
+            SnapStatus::VisualLimit => "visual_limit",
+            SnapStatus::Budget => "budget",
+            SnapStatus::Intent => "intent",
+            SnapStatus::Frozen => "frozen",
+            SnapStatus::Conflict => "conflict",
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Snap {
+    pub kind: SnapKind,
+    pub music: MusicId,
+    /// 停顿被调整的节拍
+    pub beat: BeatId,
+    /// 段落切点：切点后面的段落
+    pub next: Option<SectionId>,
+    pub from: Tick,
+    pub to: Tick,
+    pub status: SnapStatus,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -154,6 +243,8 @@ pub struct BeatPlacement {
     pub pause_natural: Tick,
     /// 纯画面节拍的主体被压缩的量
     pub elastic_shrink: Tick,
+    /// 吸附强拍 / 小节线时停顿的调整量（可正可负）
+    pub snap: Tick,
     pub voice: Option<VoicePlacement>,
     /// 与 `BeatInput::visuals` 一一对应
     pub visuals: Vec<VisualPlacement>,
@@ -172,8 +263,9 @@ pub struct ZonePlacement {
     pub over: Tick,
     pub borrowed: Vec<(SectionId, Tick)>,
     pub lent: Vec<(SectionId, Tick)>,
-    /// 是否为满足 L4 上限而被压缩
+    /// 是否为满足 L4 上下限而被压缩或拉长
     pub l4: bool,
+    pub frozen: bool,
     pub beats: Vec<BeatPlacement>,
 }
 
@@ -197,6 +289,7 @@ pub struct SolveOutput {
     /// 用尽全部可拉伸量后仍短于 L4 下限的部分（第 3 项）
     pub intent_under: Tick,
     pub hard: Vec<HardIssue>,
+    pub snaps: Vec<Snap>,
 }
 
 fn mul_div(a: Tick, num: i64, den: i64) -> Tick {
@@ -248,6 +341,8 @@ struct BeatState {
     /// 纯画面节拍的主体
     elastic: Tick,
     pause: Tick,
+    /// 吸附造成的停顿调整量
+    snap: Tick,
 }
 
 fn elastic_only(b: &BeatInput) -> bool {
@@ -282,6 +377,7 @@ fn natural_state(b: &BeatInput) -> BeatState {
         voice: b.voice,
         elastic: elastic_natural(b),
         pause: b.pause.natural,
+        snap: Tick::ZERO,
     }
 }
 
@@ -290,6 +386,7 @@ fn min_state(b: &BeatInput) -> BeatState {
         voice: b.voice.map(voice_min),
         elastic: elastic_min(b),
         pause: b.pause.min,
+        snap: Tick::ZERO,
     }
 }
 
@@ -433,11 +530,29 @@ fn apply(b: &BeatInput, s: &mut BeatState, lever: Lever, x: Tick) -> Tick {
 /// 拉伸用的手段，代价从低到高：停顿（9）→ 画面（8）。不放慢语速。
 const STRETCH_LEVERS: [Lever; 2] = [Lever::Pause, Lever::Elastic];
 
+/// 弹性画面慢放到上限时，节拍最多能有多长（没有弹性画面时为 None）。
+fn visual_dur_cap(b: &BeatInput, s: &BeatState) -> Option<Tick> {
+    b.visuals
+        .iter()
+        .filter(|v| v.kind == VisualKind::Elastic)
+        .map(|v| scaled_offset(b, s.voice, v.offset) + retime_limit(v.have))
+        .min()
+}
+
+/// 拉长节拍不能让弹性画面撑不满：可拉伸量受画面上限约束。
 fn stretch_capacity(b: &BeatInput, s: &BeatState, lever: Lever) -> Tick {
-    match lever {
+    let own = match lever {
         Lever::Pause => b.pause.max - s.pause,
         Lever::Elastic if elastic_only(b) => elastic_max(b) - s.elastic,
         Lever::Elastic | Lever::Rate => Tick::ZERO,
+    };
+    match visual_dur_cap(b, s) {
+        Some(cap) => {
+            let cur = body(b, s) + s.pause;
+            let room = if cap > cur { cap - cur } else { Tick::ZERO };
+            own.min(room)
+        }
+        None => own,
     }
 }
 
@@ -474,6 +589,9 @@ fn stretch(
         let mut targets = Vec::new();
         let mut caps = Vec::new();
         for (zi, z) in input.zones.iter().enumerate() {
+            if z.frozen.is_some() {
+                continue;
+            }
             let mut zone_caps: Vec<Tick> = z
                 .beats
                 .iter()
@@ -529,6 +647,9 @@ fn distribute(need: Tick, caps: &[Tick]) -> Vec<Tick> {
 }
 
 fn zone_dur(z: &ZoneInput, states: &[BeatState]) -> Tick {
+    if let Some(d) = z.frozen {
+        return d;
+    }
     z.beats
         .iter()
         .zip(states)
@@ -674,6 +795,7 @@ fn place_beat(
         pause: s.pause,
         pause_natural: b.pause.natural,
         elastic_shrink,
+        snap: s.snap,
         voice,
         visuals,
         cost,
@@ -692,7 +814,7 @@ pub fn solve(input: &SolveInput, _prev: Option<&SolveOutput>) -> SolveOutput {
 
     // 1. 区内消化：超出声明预算的段落先用自己的弹性
     for (zi, z) in input.zones.iter().enumerate() {
-        if let Some(budget) = z.budget {
+        if let (Some(budget), None) = (z.budget, z.frozen) {
             if naturals[zi] > budget {
                 let targets: Vec<(usize, usize)> = (0..z.beats.len()).map(|i| (zi, i)).collect();
                 absorb(input, &mut states, &targets, naturals[zi] - budget);
@@ -711,6 +833,7 @@ pub fn solve(input: &SolveInput, _prev: Option<&SolveOutput>) -> SolveOutput {
             .zones
             .iter()
             .enumerate()
+            .filter(|(_, z)| z.frozen.is_none())
             .flat_map(|(zi, z)| (0..z.beats.len()).map(move |i| (zi, i)))
             .collect();
         let need = total - max;
@@ -736,6 +859,10 @@ pub fn solve(input: &SolveInput, _prev: Option<&SolveOutput>) -> SolveOutput {
             *flag = *flag || a > b;
         }
     }
+
+    // 2c. 段落切点吸附强拍、片尾对齐小节线（有阻塞冲突时不做）
+    let blocked = intent_over > Tick::ZERO || intent_under > Tick::ZERO;
+    let snaps = snap_cuts(input, &mut states, blocked);
 
     // 3. 借用相邻区未用完的声明预算；4. 剩余部分记为偏离声明预算
     let durs = zone_durs(input, &states);
@@ -797,11 +924,15 @@ pub fn solve(input: &SolveInput, _prev: Option<&SolveOutput>) -> SolveOutput {
     for (zi, z) in input.zones.iter().enumerate() {
         let zone_start = cursor;
         let mut beats = Vec::with_capacity(z.beats.len());
-        for (b, s) in z.beats.iter().zip(&states[zi]) {
-            let p = place_beat(b, s, cursor, &mut hard);
-            cursor = cursor + p.dur;
-            cost = cost + p.cost;
-            beats.push(p);
+        if let Some(d) = z.frozen {
+            cursor = cursor + d;
+        } else {
+            for (b, s) in z.beats.iter().zip(&states[zi]) {
+                let p = place_beat(b, s, cursor, &mut hard);
+                cursor = cursor + p.dur;
+                cost = cost + p.cost;
+                beats.push(p);
+            }
         }
         zones.push(ZonePlacement {
             id: z.id.clone(),
@@ -813,6 +944,7 @@ pub fn solve(input: &SolveInput, _prev: Option<&SolveOutput>) -> SolveOutput {
             borrowed: name(&borrowed[zi]),
             lent: name(&lent[zi]),
             l4: l4[zi],
+            frozen: z.frozen.is_some(),
             beats,
         });
     }
@@ -824,68 +956,247 @@ pub fn solve(input: &SolveInput, _prev: Option<&SolveOutput>) -> SolveOutput {
         intent_over,
         intent_under,
         hard,
+        snaps,
     }
 }
 
-/// 所有可拉伸量用尽后（不放慢语速）全片的最大长度。
+/// 各节拍的起点（按当前状态）。冻结区的节拍都记为区的起点。
+fn layout(input: &SolveInput, states: &[Vec<BeatState>]) -> Vec<Vec<Tick>> {
+    let mut cursor = Tick::ZERO;
+    let mut out = Vec::with_capacity(input.zones.len());
+    for (z, st) in input.zones.iter().zip(states) {
+        let mut starts = Vec::with_capacity(z.beats.len());
+        if let Some(d) = z.frozen {
+            starts.resize(z.beats.len(), cursor);
+            cursor = cursor + d;
+        } else {
+            for (b, s) in z.beats.iter().zip(st) {
+                starts.push(cursor);
+                cursor = cursor + body(b, s) + s.pause;
+            }
+        }
+        out.push(starts);
+    }
+    out
+}
+
+fn beat_end(
+    input: &SolveInput,
+    states: &[Vec<BeatState>],
+    starts: &[Vec<Tick>],
+    z: usize,
+    i: usize,
+) -> Tick {
+    let zone = &input.zones[z];
+    match zone.frozen {
+        Some(d) => starts[z].first().copied().unwrap_or(Tick::ZERO) + d,
+        None => {
+            let s = &states[z][i];
+            starts[z][i] + body(&zone.beats[i], s) + s.pause
+        }
+    }
+}
+
+/// 音乐在时间线上的（起点, 最后一个用到它的节拍的结束点）。
+fn music_span(
+    input: &SolveInput,
+    states: &[Vec<BeatState>],
+    starts: &[Vec<Tick>],
+    m: &MusicInput,
+) -> (Tick, Tick) {
+    let start = starts[m.first.0][m.first.1] + m.start;
+    (start, beat_end(input, states, starts, m.last.0, m.last.1))
+}
+
+/// 离 `x` 最近的强拍（段落切点）或小节线（片尾）。只在音乐实际有的范围里找。
+fn grid_target(m: &MusicInput, kind: SnapKind, start: Tick, x: Tick) -> Tick {
+    let beat = m.beat.flicks();
+    let meter = i64::from(m.meter);
+    let step = match kind {
+        SnapKind::MusicEnd => beat * meter,
+        SnapKind::Section if meter % 2 == 0 => beat * (meter / 2),
+        SnapKind::Section => beat * meter,
+    };
+    if step <= 0 {
+        return x;
+    }
+    let kmax = (beat * meter * i64::from(m.bars) / step).max(1);
+    let rel = x.flicks() - start.flicks();
+    let k = (2 * rel + step).div_euclid(2 * step).clamp(1, kmax);
+    start + Tick(k * step)
+}
+
+/// D-7：调整切点前一个节拍的停顿，让段落切点落在强拍上、片尾落在小节线上。
+/// 按成片顺序逐个处理，每次都按当前状态重新排布；调整量计入第 9 项。
+fn snap_cuts(input: &SolveInput, states: &mut [Vec<BeatState>], blocked: bool) -> Vec<Snap> {
+    let n = input.zones.len();
+    let mut cands: Vec<((usize, usize), Option<usize>)> = input
+        .music
+        .iter()
+        .enumerate()
+        .map(|(mi, m)| (m.last, Some(mi)))
+        .collect();
+    for (zi, z) in input.zones.iter().enumerate() {
+        if zi + 1 < n && !z.beats.is_empty() {
+            let last = (zi, z.beats.len() - 1);
+            if !cands.iter().any(|(b, _)| *b == last) {
+                cands.push((last, None));
+            }
+        }
+    }
+    cands.sort();
+    let (lo, hi) = input.window;
+    let mut out = Vec::new();
+    for ((z, i), music) in cands {
+        let starts = layout(input, states);
+        let end = beat_end(input, states, &starts, z, i);
+        let (mi, kind) = match music {
+            Some(mi) => (mi, SnapKind::MusicEnd),
+            None => {
+                let covering = input.music.iter().position(|m| {
+                    let (a, e) = music_span(input, states, &starts, m);
+                    a < end && end < e
+                });
+                match covering {
+                    Some(mi) => (mi, SnapKind::Section),
+                    None => continue,
+                }
+            }
+        };
+        let m = &input.music[mi];
+        let (mstart, _) = music_span(input, states, &starts, m);
+        let target = grid_target(m, kind, mstart, end);
+        let delta = target - end;
+        let zone = &input.zones[z];
+        let status = if zone.frozen.is_some() {
+            SnapStatus::Frozen
+        } else if blocked {
+            SnapStatus::Conflict
+        } else if delta == Tick::ZERO {
+            SnapStatus::Aligned
+        } else if delta.flicks().abs() > MAX_SNAP.flicks() {
+            SnapStatus::TooFar
+        } else {
+            let b = &zone.beats[i];
+            let s = states[z][i];
+            let new_pause = s.pause + delta;
+            let grows = delta > Tick::ZERO;
+            if new_pause < b.pause.min || new_pause > b.pause.max {
+                SnapStatus::PauseLimit
+            } else if grows
+                && visual_dur_cap(b, &s).is_some_and(|cap| body(b, &s) + new_pause > cap)
+            {
+                SnapStatus::VisualLimit
+            } else if grows
+                && zone
+                    .budget
+                    .is_some_and(|bud| zone_dur(zone, &states[z]) + delta > bud)
+            {
+                SnapStatus::Budget
+            } else {
+                let total = sum(&zone_durs(input, states)) + delta;
+                if total < lo || total > hi {
+                    SnapStatus::Intent
+                } else {
+                    states[z][i].pause = new_pause;
+                    states[z][i].snap = states[z][i].snap + delta;
+                    SnapStatus::Snapped
+                }
+            }
+        };
+        out.push(Snap {
+            kind,
+            music: m.id.clone(),
+            beat: zone.beats[i].id.clone(),
+            next: match kind {
+                SnapKind::Section => input.zones.get(z + 1).map(|x| x.id.clone()),
+                SnapKind::MusicEnd => None,
+            },
+            from: end,
+            to: target,
+            status,
+        });
+    }
+    out
+}
+
+/// 所有可拉伸量用尽后（不放慢语速，不让画面撑不满）全片的最大长度。
 pub fn max_total(input: &SolveInput) -> Tick {
     input.zones.iter().fold(Tick::ZERO, |acc, z| {
+        if let Some(d) = z.frozen {
+            return acc + d;
+        }
         z.beats.iter().fold(acc, |acc, b| {
-            let s = BeatState {
-                voice: b.voice,
-                elastic: elastic_max(b),
-                pause: b.pause.max,
-            };
+            let mut s = natural_state(b);
+            for lever in STRETCH_LEVERS {
+                let x = stretch_capacity(b, &s, lever);
+                stretch_apply(&mut s, lever, x);
+            }
             acc + body(b, &s) + s.pause
         })
     })
 }
 
-/// 冲突集里的元素：节拍主体由谁决定，或停顿。
+/// 冲突集里的元素：节拍主体由谁决定，或停顿，或整个冻结段。
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Part {
     Voice,
     Visual(usize),
     Elastic,
     Pause,
+    Frozen,
 }
 
-/// 每个节拍在所有弹性用尽时，各部分的最短长度。
+/// 每个节拍在所有弹性用尽时，各部分的最短长度。冻结段整体算一个元素（`beat` 为空）。
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MinElement {
-    pub beat: BeatId,
+    pub zone: SectionId,
+    pub beat: Option<BeatId>,
     pub part: Part,
     pub min: Tick,
 }
 
 pub fn min_elements(input: &SolveInput) -> Vec<MinElement> {
     let mut out = Vec::new();
-    for b in input.zones.iter().flat_map(|z| &z.beats) {
-        let s = min_state(b);
-        let len = body(b, &s);
-        if len > Tick::ZERO {
-            let part = if elastic_only(b) {
-                Part::Elastic
-            } else {
-                match (s.voice, locked_end(b, s.voice)) {
-                    (Some(v), Some((e, i))) if e > v => Part::Visual(i),
-                    (Some(_), _) => Part::Voice,
-                    (None, Some((_, i))) => Part::Visual(i),
-                    (None, None) => Part::Elastic,
-                }
-            };
+    for z in &input.zones {
+        if let Some(d) = z.frozen {
             out.push(MinElement {
-                beat: b.id.clone(),
-                part,
-                min: len,
+                zone: z.id.clone(),
+                beat: None,
+                part: Part::Frozen,
+                min: d,
             });
+            continue;
         }
-        if b.pause.min > Tick::ZERO {
-            out.push(MinElement {
-                beat: b.id.clone(),
-                part: Part::Pause,
-                min: b.pause.min,
-            });
+        for b in &z.beats {
+            let s = min_state(b);
+            let len = body(b, &s);
+            if len > Tick::ZERO {
+                let part = if elastic_only(b) {
+                    Part::Elastic
+                } else {
+                    match (s.voice, locked_end(b, s.voice)) {
+                        (Some(v), Some((e, i))) if e > v => Part::Visual(i),
+                        (Some(_), _) => Part::Voice,
+                        (None, Some((_, i))) => Part::Visual(i),
+                        (None, None) => Part::Elastic,
+                    }
+                };
+                out.push(MinElement {
+                    zone: z.id.clone(),
+                    beat: Some(b.id.clone()),
+                    part,
+                    min: len,
+                });
+            }
+            if b.pause.min > Tick::ZERO {
+                out.push(MinElement {
+                    zone: z.id.clone(),
+                    beat: Some(b.id.clone()),
+                    part: Part::Pause,
+                    min: b.pause.min,
+                });
+            }
         }
     }
     out
@@ -929,11 +1240,13 @@ mod tests {
             id: SectionId::parse(id).unwrap(),
             budget,
             beats,
+            frozen: None,
         }
     }
 
     fn wide(zones: Vec<ZoneInput>) -> SolveInput {
         SolveInput {
+            music: Vec::new(),
             zones,
             window: (Tick::ZERO, s(1000)),
         }
@@ -1121,6 +1434,7 @@ mod tests {
     #[test]
     fn intent_over_escalates() {
         let input = SolveInput {
+            music: Vec::new(),
             zones: vec![zone(
                 "S1",
                 None,
@@ -1141,6 +1455,7 @@ mod tests {
     #[test]
     fn short_film_stretches_pauses_within_budget_first() {
         let input = SolveInput {
+            music: Vec::new(),
             zones: vec![
                 zone(
                     "S1",
@@ -1171,6 +1486,7 @@ mod tests {
     #[test]
     fn short_film_escalates_when_not_enough() {
         let input = SolveInput {
+            music: Vec::new(),
             zones: vec![zone(
                 "S1",
                 None,
@@ -1187,8 +1503,38 @@ mod tests {
     }
 
     #[test]
+    fn pause_stretch_never_outruns_visuals() {
+        let input = SolveInput {
+            music: Vec::new(),
+            zones: vec![zone(
+                "S1",
+                None,
+                vec![beat(
+                    "S1.b1",
+                    Some(s(2)),
+                    // 画面最多撑到 1s + 1.2s = 2.2s
+                    vec![vis(s(1), s(1), VisualKind::Elastic)],
+                    PauseInput {
+                        natural: ms(100),
+                        min: Tick::ZERO,
+                        max: ms(800),
+                    },
+                )],
+            )],
+            window: (s(5), s(10)),
+        };
+        let out = solve(&input, None);
+        let b = &out.zones[0].beats[0];
+        assert_eq!(b.pause, ms(200), "停顿只拉到画面撑得住的地方");
+        assert_eq!(b.visuals[0].fill, FillKind::Retime);
+        assert_eq!(max_total(&input), ms(2200));
+        assert_eq!(out.intent_under, ms(2800));
+    }
+
+    #[test]
     fn elastic_only_beat_stretches_by_retime() {
         let input = SolveInput {
+            music: Vec::new(),
             zones: vec![zone(
                 "S1",
                 None,
@@ -1207,6 +1553,141 @@ mod tests {
         assert_eq!(b.visuals[0].fill, FillKind::Retime);
         assert_eq!(b.elastic_shrink, Tick::ZERO);
         assert_eq!(out.cost.trim, to_cost(s(1)), "拉长只按慢放计一次");
+    }
+
+    #[test]
+    fn frozen_zone_is_a_hard_box() {
+        let mut frozen = zone(
+            "S1",
+            None,
+            vec![beat("S1.b1", Some(s(2)), vec![], pause(400, 200))],
+        );
+        frozen.frozen = Some(s(3));
+        let input = SolveInput {
+            music: Vec::new(),
+            zones: vec![
+                frozen,
+                zone(
+                    "S2",
+                    None,
+                    vec![beat("S2.b1", Some(s(2)), vec![], pause(400, 200))],
+                ),
+            ],
+            window: (Tick::ZERO, ms(4500)),
+        };
+        let out = solve(&input, None);
+        assert_eq!(out.zones[0].dur, s(3));
+        assert!(out.zones[0].frozen);
+        assert!(out.zones[0].beats.is_empty());
+        assert_eq!(out.zones[1].start, s(3));
+        // 超出 L4 上限 0.9s：只能压 S2（停顿 0.2s + 语速），冻结段不动
+        assert!(out.zones[1].dur < ms(2400));
+        assert!(out.intent_over > Tick::ZERO);
+        let elems = min_elements(&input);
+        let frozen_min: Vec<Tick> = elems
+            .iter()
+            .filter(|e| e.part == Part::Frozen)
+            .map(|e| e.min)
+            .collect();
+        assert_eq!(frozen_min, vec![s(3)], "冻结段整体算一个冲突元素");
+        assert_eq!(max_total(&input), s(3) + ms(2800));
+    }
+
+    fn music(first: (usize, usize), last: (usize, usize)) -> MusicInput {
+        MusicInput {
+            id: MusicId::parse("M1").unwrap(),
+            first,
+            last,
+            start: Tick::ZERO,
+            beat: ms(500),
+            meter: 4,
+            bars: 8,
+        }
+    }
+
+    #[test]
+    fn music_end_snaps_to_bar_line() {
+        // 结束点 2.1s，最近的小节线 2.0s：停顿 0.4s → 0.3s
+        let input = SolveInput {
+            music: vec![music((0, 0), (0, 0))],
+            zones: vec![zone(
+                "S1",
+                None,
+                vec![beat("S1.b1", Some(ms(1700)), vec![], pause(400, 200))],
+            )],
+            window: (Tick::ZERO, s(100)),
+        };
+        let out = solve(&input, None);
+        assert_eq!(out.total, s(2));
+        let b = &out.zones[0].beats[0];
+        assert_eq!(b.pause, ms(300));
+        assert_eq!(b.snap, ms(-100));
+        assert_eq!(out.cost.pause, to_cost(ms(100)));
+        assert_eq!(out.snaps.len(), 1);
+        assert_eq!(out.snaps[0].status, SnapStatus::Snapped);
+        assert_eq!(out.snaps[0].kind, SnapKind::MusicEnd);
+    }
+
+    #[test]
+    fn section_cut_snaps_to_strong_beat_then_end_to_bar() {
+        // 切点 2.3s → 强拍 2.0s；片尾 4.3s → 小节线 4.0s
+        let input = SolveInput {
+            music: vec![music((0, 0), (1, 0))],
+            zones: vec![
+                zone(
+                    "S1",
+                    None,
+                    vec![beat("S1.b1", Some(ms(1900)), vec![], pause(400, 0))],
+                ),
+                zone(
+                    "S2",
+                    None,
+                    vec![beat("S2.b1", Some(ms(1900)), vec![], pause(400, 0))],
+                ),
+            ],
+            window: (Tick::ZERO, s(100)),
+        };
+        let out = solve(&input, None);
+        let kinds: Vec<(SnapKind, SnapStatus)> =
+            out.snaps.iter().map(|x| (x.kind, x.status)).collect();
+        assert_eq!(
+            kinds,
+            vec![
+                (SnapKind::Section, SnapStatus::Snapped),
+                (SnapKind::MusicEnd, SnapStatus::Snapped)
+            ]
+        );
+        assert_eq!(out.zones[1].start, s(2));
+        assert_eq!(out.total, s(4));
+        assert_eq!(solve(&input, None), out, "吸附结果确定");
+    }
+
+    #[test]
+    fn snap_respects_limits() {
+        // 结束点 2.6s，最近小节线 2.0s：差 0.6s，超过 0.3s 不吸附
+        let far = SolveInput {
+            music: vec![music((0, 0), (0, 0))],
+            zones: vec![zone(
+                "S1",
+                None,
+                vec![beat("S1.b1", Some(ms(2200)), vec![], pause(400, 200))],
+            )],
+            window: (Tick::ZERO, s(100)),
+        };
+        assert_eq!(solve(&far, None).snaps[0].status, SnapStatus::TooFar);
+        // 结束点 3.8s → 4.0s 需要停顿 +0.2s，但预算只有 3.9s
+        let budget = SolveInput {
+            music: vec![music((0, 0), (0, 0))],
+            zones: vec![zone(
+                "S1",
+                Some(ms(3900)),
+                vec![beat("S1.b1", Some(ms(3400)), vec![], pause(400, 200))],
+            )],
+            window: (Tick::ZERO, s(100)),
+        };
+        let out = solve(&budget, None);
+        assert_eq!(out.snaps[0].status, SnapStatus::Budget);
+        assert_eq!(out.zones[0].beats[0].snap, Tick::ZERO);
     }
 
     #[test]
@@ -1243,6 +1724,7 @@ mod tests {
         let out = solve(&input, None);
         assert_eq!(out.zones[0].beats[0].visuals[0].offset, ms(1620));
         let tight = SolveInput {
+            music: Vec::new(),
             zones: vec![zone(
                 "S1",
                 Some(s(3)),

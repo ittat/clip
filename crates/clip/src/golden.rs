@@ -9,7 +9,8 @@ use std::fs;
 use std::path::Path;
 use std::process::ExitCode;
 
-use core_store::{SourceSet, SOURCE_FILES};
+use core_model::{format_duration, parse_duration, Tick};
+use core_store::{is_source_file, SourceSet};
 use serde::Deserialize;
 use serde_json::{json, Value as Json};
 use serde_yaml_ng::Value;
@@ -48,6 +49,37 @@ struct Case {
     /// compile：这些代价项必须大于 0
     #[serde(default)]
     expect_nonzero_costs: Vec<String>,
+    /// compile：冲突里必须出现这些 code
+    #[serde(default)]
+    expect_conflict_codes: Vec<String>,
+    /// compile：与不叠加 overlay 的样例工程相比，补丁锚点在时间线上移动的量
+    #[serde(default)]
+    expect_anchor_delta: BTreeMap<String, String>,
+    /// compile：冲突里不能出现这些 code
+    #[serde(default)]
+    forbid_conflict_codes: Vec<String>,
+    /// compile：报告里指定路径的值必须等于给定值
+    #[serde(default)]
+    expect_report: Vec<ReportCheck>,
+    /// freeze：先冻结这些段落，再叠加 overlay
+    #[serde(default)]
+    freeze: Vec<String>,
+    /// rule_effect：在 overlay 之上再叠加它，用来撤销规则
+    #[serde(default)]
+    revert: Option<Value>,
+    /// rule_effect：撤销规则前后，只有这些片段不同
+    #[serde(default)]
+    expect_moved_clips: Vec<String>,
+    /// rule_effect：撤销规则前后，这些片段必须完全相同
+    #[serde(default)]
+    expect_untouched_clips: Vec<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ReportCheck {
+    path: Vec<String>,
+    equals: Value,
 }
 
 #[derive(Deserialize, Clone, Copy, PartialEq, Eq)]
@@ -63,6 +95,10 @@ enum Kind {
     TickRoundtrip,
     /// 对比叠加修改前后，按区统计变化：段落整体平移不算变化
     Locality,
+    /// 冻结段落后修改源文件：冻结段的片段必须逐字节不变
+    Freeze,
+    /// 撤销规则前后对比：只有规则改动过的片段不同，人的补丁不受影响
+    RuleEffect,
 }
 
 type Files = BTreeMap<String, Vec<u8>>;
@@ -115,7 +151,7 @@ fn apply_overlay(src: &SourceSet, overlay: &Value) -> Result<SourceSet, String> 
     let mut out = src.clone();
     for (k, patch) in files {
         let name = k.as_str().ok_or("文件名必须是字符串")?;
-        if !SOURCE_FILES.contains(&name) {
+        if !is_source_file(name) {
             return Err(format!("不能修改 {name}：只能修改源文件"));
         }
         let text = src.get(name).unwrap_or("");
@@ -194,6 +230,47 @@ fn compile(src: &SourceSet) -> Result<Files, String> {
         .map_err(|e| e.to_string())
 }
 
+fn timeline_of(files: &Files) -> Result<Json, String> {
+    let bytes = files
+        .get("build/timeline.json")
+        .ok_or("编译没有产出时间线")?;
+    serde_json::from_slice(bytes).map_err(|e| e.to_string())
+}
+
+/// 时间线上所有片段，以 ID 为键。
+fn clips_by_id(timeline: &Json) -> BTreeMap<String, Json> {
+    let mut out = BTreeMap::new();
+    if let Some(tracks) = timeline["tracks"].as_object() {
+        for list in tracks.values() {
+            for c in list.as_array().into_iter().flatten() {
+                if let Some(id) = c["id"].as_str() {
+                    out.insert(id.to_string(), c.clone());
+                }
+            }
+        }
+    }
+    out
+}
+
+/// 某段落的片段，时间改为相对段落起点。
+fn section_clips(timeline: &Json, start: i64, beats: &BTreeSet<String>) -> BTreeMap<String, Json> {
+    clips_by_id(timeline)
+        .into_iter()
+        .filter(|(_, c)| c["origin"].as_str().is_some_and(|o| beats.contains(o)))
+        .map(|(id, mut c)| {
+            for k in ["rec_in", "rec_out"] {
+                let v = c[k].as_i64().unwrap_or(0) - start;
+                c[k] = json!(v);
+            }
+            (id, c)
+        })
+        .collect()
+}
+
+fn lookup<'a>(v: &'a Json, path: &[String]) -> &'a Json {
+    path.iter().fold(v, |acc, k| &acc[k.as_str()])
+}
+
 fn report_of(files: &Files) -> Result<Json, String> {
     let bytes = files.get(REPORT).ok_or("编译没有产出求解报告")?;
     serde_json::from_slice(bytes).map_err(|e| e.to_string())
@@ -246,6 +323,9 @@ fn changed_zones(a: &Json, b: &Json) -> Vec<String> {
 
 fn check_compile(root: &Path, case: &Case) -> Result<Outcome, String> {
     let out = compile(&fixture(root, case)?)?;
+    if let Some(k) = out.keys().find(|k| !k.starts_with("build/")) {
+        return Ok(Outcome::Fail(format!("编译写了 build/ 之外的文件：{k}")));
+    }
     let report = report_of(&out)?;
     let status = report["status"].as_str().unwrap_or("").to_string();
     if let Some(want) = &case.expect_status {
@@ -274,6 +354,58 @@ fn check_compile(root: &Path, case: &Case) -> Result<Outcome, String> {
             Some(v) if v > 0 => {}
             Some(_) => return Ok(Outcome::Fail(format!("代价 {name} 应大于 0"))),
             None => return Ok(Outcome::Fail(format!("报告里没有代价项 {name}"))),
+        }
+    }
+    let codes: BTreeSet<&str> = report["conflicts"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|c| c["code"].as_str())
+        .collect();
+    if let Some(c) = case
+        .forbid_conflict_codes
+        .iter()
+        .find(|c| codes.contains(c.as_str()))
+    {
+        return Ok(Outcome::Fail(format!("冲突里不应有 {c}")));
+    }
+    for check in &case.expect_report {
+        let want: Json = serde_json::to_value(&check.equals).map_err(|e| e.to_string())?;
+        let got = lookup(&report, &check.path);
+        if *got != want {
+            return Ok(Outcome::Fail(format!(
+                "报告 {} 应为 {want}，实际为 {got}",
+                check.path.join(".")
+            )));
+        }
+    }
+    for code in &case.expect_conflict_codes {
+        let found = report["conflicts"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .any(|c| c["code"].as_str() == Some(code.as_str()));
+        if !found {
+            return Ok(Outcome::Fail(format!("冲突里应有 {code}")));
+        }
+    }
+    if !case.expect_anchor_delta.is_empty() {
+        let before = report_of(&compile(&base_fixture(root, case)?)?)?;
+        for (id, want) in &case.expect_anchor_delta {
+            let want = parse_duration(want, None).map_err(|e| format!("{id}：{e}"))?;
+            let a = before["patches"][id.as_str()]["at"].as_i64();
+            let b = report["patches"][id.as_str()]["at"].as_i64();
+            match (a, b) {
+                (Some(a), Some(b)) if b - a == want.flicks() => {}
+                (Some(a), Some(b)) => {
+                    return Ok(Outcome::Fail(format!(
+                        "{id} 的锚点应移动 {}，实际移动 {}",
+                        format_duration(want),
+                        format_duration(Tick(b - a))
+                    )))
+                }
+                _ => return Ok(Outcome::Fail(format!("{id} 的锚点没有解析出位置"))),
+            }
         }
     }
     for target in &case.forbid_option_targets {
@@ -319,34 +451,91 @@ fn run_case(root: &Path, case: &Case) -> Result<Outcome, String> {
             Ok(Outcome::Pass(format!("{n} 次往返和累加无漂移")))
         }
         Kind::Compile => check_compile(root, case),
-        Kind::Idempotent => {
-            let src = fixture(root, case)?;
-            let first = compile(&src)?;
-            // 把 build/ 产物混进源文件集合：编译器必须忽略它们
-            let mut with_build = src.clone();
-            for (name, bytes) in &first {
-                with_build.insert(name, String::from_utf8_lossy(bytes).into_owned());
+        Kind::Idempotent => check_idempotent(&fixture(root, case)?),
+        Kind::Shuffle => check_shuffle(&fixture(root, case)?, case.seeds.unwrap_or(20)),
+        Kind::Freeze => {
+            if case.freeze.is_empty() {
+                return Err(format!("{} 是 freeze 用例，必须写 freeze", case.id));
             }
-            for round in 1..=3 {
-                let again = compile(&with_build)?;
-                if let Some(d) = describe(&first, &again) {
-                    return Ok(Outcome::Fail(format!("第 {round} 次重新编译结果不同：{d}")));
+            let base = base_fixture(root, case)?;
+            let before = compile(&base)?;
+            let mut frozen = base.clone();
+            for s in &case.freeze {
+                let (name, bytes) = core_compile::freeze(&base, s).map_err(|e| e.to_string())?;
+                frozen.insert(&name, String::from_utf8_lossy(&bytes).into_owned());
+            }
+            let after_src = match &case.overlay {
+                None => frozen,
+                Some(o) => apply_overlay(&frozen, o)?,
+            };
+            let after = compile(&after_src)?;
+            let (rb, ra) = (report_of(&before)?, report_of(&after)?);
+            let (tb, ta) = (timeline_of(&before)?, timeline_of(&after)?);
+            let mut n = 0;
+            for s in &case.freeze {
+                if ra["sections"][s.as_str()]["frozen"] != json!(true) {
+                    return Ok(Outcome::Fail(format!("{s} 没有被当作冻结段")));
                 }
+                let beats: BTreeSet<String> = rb["sections"][s.as_str()]["beats"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|b| b.as_str().map(str::to_string))
+                    .collect();
+                let start = |r: &Json| r["sections"][s.as_str()]["start"].as_i64().unwrap_or(0);
+                let a = section_clips(&tb, start(&rb), &beats);
+                let b = section_clips(&ta, start(&ra), &beats);
+                if a.is_empty() {
+                    return Ok(Outcome::Fail(format!("{s} 没有片段")));
+                }
+                if let Some((id, _)) = a.iter().find(|(id, c)| b.get(*id) != Some(*c)) {
+                    return Ok(Outcome::Fail(format!("冻结段 {s} 的片段 {id} 变了")));
+                }
+                if b.len() != a.len() {
+                    return Ok(Outcome::Fail(format!("冻结段 {s} 的片段数量变了")));
+                }
+                n += a.len();
             }
-            Ok(Outcome::Pass("连续 3 次编译逐字节一致".to_string()))
+            if tb == ta {
+                return Ok(Outcome::Fail(
+                    "overlay 没有改变任何输出，用例没有意义".to_string(),
+                ));
+            }
+            Ok(Outcome::Pass(format!(
+                "冻结段的 {n} 个片段逐字节不变，其余部分照常变化"
+            )))
         }
-        Kind::Shuffle => {
-            let src = fixture(root, case)?;
-            let base = compile(&src)?;
-            let n = case.seeds.unwrap_or(20);
-            for seed in 1..=n {
-                let shuffled = shuffle_sources(&src, seed)?;
-                let out = compile(&shuffled)?;
-                if let Some(d) = describe(&base, &out) {
-                    return Ok(Outcome::Fail(format!("种子 {seed}：打乱后输出不同：{d}")));
+        Kind::RuleEffect => {
+            let revert = case
+                .revert
+                .as_ref()
+                .ok_or_else(|| format!("{} 是 rule_effect 用例，必须写 revert", case.id))?;
+            let with = fixture(root, case)?;
+            let without = apply_overlay(&with, revert)?;
+            let ca = clips_by_id(&timeline_of(&compile(&with)?)?);
+            let cb = clips_by_id(&timeline_of(&compile(&without)?)?);
+            let ids: BTreeSet<&String> = ca.keys().chain(cb.keys()).collect();
+            let moved: BTreeSet<String> = ids
+                .into_iter()
+                .filter(|id| ca.get(*id) != cb.get(*id))
+                .cloned()
+                .collect();
+            let want: BTreeSet<String> = case.expect_moved_clips.iter().cloned().collect();
+            if moved != want {
+                return Ok(Outcome::Fail(format!(
+                    "规则改动的片段应为 {want:?}，实际为 {moved:?}"
+                )));
+            }
+            for id in &case.expect_untouched_clips {
+                match (ca.get(id), cb.get(id)) {
+                    (Some(a), Some(b)) if a == b => {}
+                    _ => return Ok(Outcome::Fail(format!("片段 {id} 应完全不受规则影响"))),
                 }
             }
-            Ok(Outcome::Pass(format!("{n} 个种子打乱后输出一致")))
+            Ok(Outcome::Pass(format!(
+                "规则只改动了 {}；撤销后恢复原样",
+                moved.into_iter().collect::<Vec<_>>().join("、")
+            )))
         }
         Kind::Locality => {
             if case.overlay.is_none() {
@@ -371,6 +560,117 @@ fn run_case(root: &Path, case: &Case) -> Result<Outcome, String> {
                 Ok(Outcome::Fail(detail))
             }
         }
+    }
+}
+
+/// 连续编译 3 次（并把 build/ 产物混进源文件集合），结果必须逐字节一致。
+fn check_idempotent(src: &SourceSet) -> Result<Outcome, String> {
+    let first = compile(src)?;
+    let mut with_build = src.clone();
+    for (name, bytes) in &first {
+        with_build.insert(name, String::from_utf8_lossy(bytes).into_owned());
+    }
+    for round in 1..=3 {
+        let again = compile(&with_build)?;
+        if let Some(d) = describe(&first, &again) {
+            return Ok(Outcome::Fail(format!("第 {round} 次重新编译结果不同：{d}")));
+        }
+    }
+    Ok(Outcome::Pass("连续 3 次编译逐字节一致".to_string()))
+}
+
+/// 用 `n` 个种子打乱 YAML 映射的键顺序，结果必须逐字节一致。
+fn check_shuffle(src: &SourceSet, n: u64) -> Result<Outcome, String> {
+    let base = compile(src)?;
+    for seed in 1..=n {
+        let shuffled = shuffle_sources(src, seed)?;
+        let out = compile(&shuffled)?;
+        if let Some(d) = describe(&base, &out) {
+            return Ok(Outcome::Fail(format!("种子 {seed}：打乱后输出不同：{d}")));
+        }
+    }
+    Ok(Outcome::Pass(format!("{n} 个种子打乱后输出一致")))
+}
+
+/// 把第一个能加长的停顿加长一帧，变化的区不能超过 2 个。
+fn check_locality(src: &SourceSet) -> Result<Outcome, String> {
+    let p = core_store::load(src).map_err(|e| e.to_string())?;
+    let frame = p.config.fps.frame();
+    let pick = p
+        .sequence
+        .iter()
+        .filter(|s| !p.frozen.contains_key(*s))
+        .flat_map(|s| p.sections[s].beats.iter())
+        .find(|b| {
+            let ps = &p.beats[*b].pause;
+            ps.after + frame <= ps.max
+        });
+    let Some(beat) = pick else {
+        return Ok(Outcome::Pass("没有可以加长的停顿，跳过".to_string()));
+    };
+    let after = p.beats[beat].pause.after + frame;
+    let text = format!(
+        "content.yaml:\n  beats:\n    \"{beat}\":\n      pause: {{after: \"{}\"}}\n",
+        format_duration(after)
+    );
+    let overlay: Value = serde_yaml_ng::from_str(&text).map_err(|e| e.to_string())?;
+    let before = report_of(&compile(src)?)?;
+    let changed = report_of(&compile(&apply_overlay(src, &overlay)?)?)?;
+    let zones = changed_zones(&before, &changed);
+    let detail = format!(
+        "{beat} 的停顿加长一帧：{} 个区变化（{}），上限 2",
+        zones.len(),
+        if zones.is_empty() {
+            "无".to_string()
+        } else {
+            zones.join("、")
+        }
+    );
+    if zones.len() <= 2 {
+        Ok(Outcome::Pass(detail))
+    } else {
+        Ok(Outcome::Fail(detail))
+    }
+}
+
+/// `clip determinism <dir>`：对任意工程跑幂等、顺序无关、局部性三项检查。
+pub fn determinism(dir: &Path, json_out: bool) -> ExitCode {
+    let src = match SourceSet::read_dir(dir) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("读取工程失败：{e}");
+            return ExitCode::from(EXIT_INTERNAL);
+        }
+    };
+    let checks = [
+        ("idempotent", "幂等", check_idempotent(&src)),
+        ("shuffle", "顺序无关", check_shuffle(&src, 20)),
+        ("locality", "局部性", check_locality(&src)),
+    ];
+    let mut failed = 0;
+    let mut results = Vec::new();
+    for (key, name, r) in checks {
+        let (pass, detail) = match r {
+            Ok(Outcome::Pass(d)) => (true, d),
+            Ok(Outcome::Fail(d)) => (false, d),
+            Err(e) => (false, format!("运行出错：{e}")),
+        };
+        if !pass {
+            failed += 1;
+        }
+        if json_out {
+            results.push(json!({"check": key, "pass": pass, "detail": detail}));
+        } else {
+            println!("{} {name} — {detail}", if pass { "PASS" } else { "FAIL" });
+        }
+    }
+    if json_out {
+        println!("{}", json!({"failed": failed, "results": results}));
+    }
+    if failed == 0 {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::from(EXIT_CONFLICT)
     }
 }
 

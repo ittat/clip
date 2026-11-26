@@ -1,11 +1,11 @@
 {
-  "duration": 8326080000,
+  "duration": 8297856000,
   "format": 1,
   "fps": {
     "den": 1,
     "num": 25
   },
-  "solver": "zone-3",
+  "solver": "zone-6",
   "tracks": {
     "A1": [
       {
@@ -31,12 +31,24 @@
       {
         "id": "S2.b2/voice",
         "origin": "S2.b2",
-        "rec_in": 5362560000,
-        "rec_out": 7620480000,
+        "rec_in": 5334336000,
+        "rec_out": 7592256000,
         "speed_ppm": 1000000,
         "src": "gen/n_S2.2.wav",
         "src_in": 0,
         "src_out": 2257920000
+      }
+    ],
+    "A2": [
+      {
+        "id": "music/M1",
+        "origin": "S2.b1",
+        "rec_in": 2257920000,
+        "rec_out": 7902720000,
+        "speed_ppm": 1000000,
+        "src": "media/m1.wav",
+        "src_in": 0,
+        "src_out": 5644800000
       }
     ],
     "V1": [
@@ -54,29 +66,42 @@
         "id": "S2.b1/visual[0]",
         "origin": "S2.b1",
         "rec_in": 2257920000,
-        "rec_out": 5362560000,
+        "rec_out": 5334336000,
         "speed_ppm": 1000000,
         "src": "media/a.mp4",
         "src_in": 14112000000,
-        "src_out": 17216640000
+        "src_out": 17188416000
       }
     ],
     "V2": [
       {
+        "attrs": {
+          "exposure": "+0.3"
+        },
         "id": "S2.b1/visual[1]",
         "origin": "S2.b1",
-        "rec_in": 3217536000,
+        "patches": [
+          "ov1",
+          "ov2"
+        ],
+        "rec_in": 4374720000,
         "rec_out": 5334336000,
         "speed_ppm": 833333,
         "src": "media/b.mp4",
-        "src_in": 2116800000,
+        "src_in": 3081120000,
         "src_out": 3880800000
       },
       {
+        "attrs": {
+          "exposure": "-0.2"
+        },
         "id": "S2.b2/visual[0]",
         "origin": "S2.b2",
-        "rec_in": 5362560000,
-        "rec_out": 8326080000,
+        "patches": [
+          "ov3"
+        ],
+        "rec_in": 5334336000,
+        "rec_out": 8297856000,
         "speed_ppm": 1000000,
         "src": "media/b.mp4",
         "src_in": 8467200000,

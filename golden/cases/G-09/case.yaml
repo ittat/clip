@@ -1,0 +1,14 @@
+id: G-09
+title: 冻结 S1 后修改 S1 和 S2 的源文件：S1 的片段逐字节不变
+kind: freeze
+fixture: min_explainer
+freeze: [S1]
+# S1 的停顿改长、S2 的预算收紧。S1 已冻结，必须原样输出；S2 照常重新求解
+overlay:
+  content.yaml:
+    beats:
+      S1.b1:
+        pause: {after: 0.6s, flex: 0.2s..0.8s}
+  structure.yaml:
+    sections:
+      S2: {budget: 7s}

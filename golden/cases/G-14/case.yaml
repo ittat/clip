@@ -1,0 +1,14 @@
+id: G-14
+title: ov2 的拍子和事件因音乐入点后移半拍而分开：上报，按主锚点保留
+kind: compile
+fixture: min_explainer
+expect_status: ok
+expect_conflict_codes: [anchor_diverged]
+expect_anchor_delta: {ov2: 0.25s}
+# 基线里两个锚点相差不到半帧（重合）；后移 0.25s 后分开。阶段 0 只写进报告，
+# 不写 queue.yaml（转成待决项是阶段 1 的事）
+overlay:
+  content.yaml:
+    beats:
+      S2.b1:
+        music: {cue: M1, fit: bars, start: 0.25s}

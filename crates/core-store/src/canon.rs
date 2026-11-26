@@ -38,6 +38,16 @@ fn reject_floats(v: &Value, path: &str) -> Result<(), CanonError> {
     }
 }
 
+/// FNV-1a 64 位哈希。用于区结果的指纹（不是安全用途）。
+pub fn fnv1a64(bytes: &[u8]) -> u64 {
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+    for &b in bytes {
+        h ^= u64::from(b);
+        h = h.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    h
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

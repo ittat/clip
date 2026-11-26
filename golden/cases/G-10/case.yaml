@@ -5,11 +5,15 @@ fixture: min_explainer
 expect_status: ok
 expect_zero_costs: [declared_budget, cross_zone, intent, pause, rate]
 # S2 不声明预算（由求解得出），旁白变长 0.08s（同 G-04）：
-# 段落自然变长即可，不产生任何时间类代价
+# 段落自然变长即可，不产生任何时间类代价。去掉音乐，排除片尾吸附带来的停顿调整
 overlay:
   structure.yaml:
     sections:
       S2: {budget: null}
+  content.yaml:
+    beats:
+      S2.b1: {music: null}
+      S2.b2: {music: null}
   narration.yaml:
     "n:S2.1": {text: "其实，这个计划从一开始就{注定|zhu4ding4}破产了。[停0.3]"}
   locks/tts.lock.json:

@@ -1,0 +1,15 @@
+id: G-11
+title: 求解器版本变了：报告列出结果不同的区，锁文件不会自动更新
+kind: compile
+fixture: min_explainer
+expect_status: ok
+expect_conflict_codes: [solver_changed]
+expect_report:
+  - {path: [solver_lock, version_matches], equals: false}
+  - {path: [solver_lock, zones_changed], equals: [S1, S2]}
+# 模拟用旧版求解器确认过的锁。编译只写 build/（运行器会检查），锁文件只能用 clip lock accept 更新
+overlay:
+  locks/solver.lock.json:
+    format: 1
+    solver: zone-3
+    zones: {S1: "0000000000000000", S2: "0000000000000000"}

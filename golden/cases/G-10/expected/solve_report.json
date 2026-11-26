@@ -7,6 +7,7 @@
       "offset": 0,
       "pause": 282240000,
       "reasons": [],
+      "snap": 0,
       "visuals": [
         {
           "fill": "cut",
@@ -34,6 +35,7 @@
       "reasons": [
         "visual[1] shot:B.2 慢放 8.8%：素材 2.5s 撑满 2.72s"
       ],
+      "snap": 0,
       "visuals": [
         {
           "fill": "cut",
@@ -65,6 +67,7 @@
       "offset": 2878848000,
       "pause": 423360000,
       "reasons": [],
+      "snap": 0,
       "visuals": [
         {
           "fill": "cut",
@@ -82,7 +85,17 @@
       }
     }
   },
-  "conflicts": [],
+  "conflicts": [
+    {
+      "anchor": "bar:M1.2.b3",
+      "assignee": "human",
+      "blocking": false,
+      "code": "unanchored",
+      "decidable": "judgment",
+      "note": "锚点找不到了：补丁没有应用，也没有丢弃",
+      "override": "ov2"
+    }
+  ],
   "cost": [
     [
       "hard",
@@ -134,15 +147,74 @@
     "under": 0,
     "within": true
   },
-  "not_applied": [
-    "music:S2.b1",
-    "music:S2.b2",
-    "ov1",
-    "ov2",
-    "r:1",
-    "visual.cut_points"
-  ],
+  "music": {},
+  "not_applied": [],
+  "patches": {
+    "ov1": {
+      "alt": [],
+      "alt_coincide": false,
+      "anchor": "n:S2.1.w2",
+      "applied_at": 2399040000,
+      "at": 2399040000,
+      "by": "human",
+      "offset": 0,
+      "op": "attrs",
+      "resolved_by": null,
+      "status": "applied",
+      "target": "S2.b1.visual[1]"
+    },
+    "ov2": {
+      "alt": [
+        {
+          "anchor": "ev:B.2.1",
+          "at": 4127929344,
+          "delta": null,
+          "offset": 56448000
+        }
+      ],
+      "alt_coincide": true,
+      "anchor": "bar:M1.2.b3",
+      "applied_at": null,
+      "at": null,
+      "by": "human",
+      "offset": 0,
+      "op": "cut_in",
+      "resolved_by": null,
+      "status": "unanchored",
+      "target": "S2.b1.visual[1]"
+    },
+    "ov3": {
+      "alt": [],
+      "alt_coincide": false,
+      "anchor": "shot:B.3@1s",
+      "applied_at": 5560128000,
+      "at": 5560128000,
+      "by": "human",
+      "offset": 0,
+      "op": "attrs",
+      "resolved_by": null,
+      "status": "applied",
+      "target": "S2.b2.visual[0]"
+    }
+  },
   "project_solver": "0.0.1",
+  "rules": {
+    "r:1": {
+      "by": "human",
+      "clips": [
+        {
+          "clip": "S2.b2/visual[0]",
+          "status": "no_music"
+        }
+      ],
+      "do": "cut_on: beat.strong",
+      "scope": {
+        "beat": "S2.b2",
+        "role": "b-roll",
+        "section": null
+      }
+    }
+  },
   "sections": {
     "S1": {
       "beats": [
@@ -152,6 +224,8 @@
       "budget": null,
       "budget_kind": "derived",
       "dur": 1975680000,
+      "frozen": false,
+      "hash": "964ac47f94d1f8bd",
       "l4_absorbed": false,
       "lent": [],
       "natural": 1975680000,
@@ -167,6 +241,8 @@
       "budget": null,
       "budget_kind": "derived",
       "dur": 5560128000,
+      "frozen": false,
+      "hash": "29b5e4f62214ab1c",
       "l4_absorbed": false,
       "lent": [],
       "natural": 5560128000,
@@ -174,7 +250,10 @@
       "start": 1975680000
     }
   },
-  "solver": "zone-3",
+  "slips": {},
+  "snaps": [],
+  "solver": "zone-6",
+  "solver_lock": null,
   "status": "ok",
   "total": 7535808000,
   "tts_resynth_needed": [],

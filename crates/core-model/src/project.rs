@@ -1,6 +1,6 @@
 //! 校验后的工程模型。只由 core-store 构造；字段都已通过引用检查。
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 use crate::id::*;
 use crate::tick::{Fps, Ratio, SampleRate, Tick};
@@ -17,7 +17,10 @@ pub struct Project {
     pub media: Media,
     pub tts: BTreeMap<NarrationId, TtsEntry>,
     pub overrides: BTreeMap<OverrideId, Override>,
-    pub rules: BTreeSet<RuleId>,
+    pub rules: BTreeMap<RuleId, Rule>,
+    /// 冻结的段落：所有权归 L1，编译时当作硬盒子原样输出
+    pub frozen: BTreeMap<SectionId, Frozen>,
+    pub solver_lock: Option<SolverLock>,
 }
 
 impl Project {
@@ -94,6 +97,8 @@ pub struct Visual {
 pub struct MusicUse {
     pub cue: MusicId,
     pub fit: Fit,
+    /// 音乐相对节拍开始延后多久进入。只有第一个用到这段音乐的节拍里的值生效
+    pub start: Option<Tick>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -123,6 +128,15 @@ pub struct Media {
     pub shots: BTreeMap<ShotId, Shot>,
     pub events: BTreeMap<EventId, Event>,
     pub music: BTreeMap<MusicId, Music>,
+    pub marks: BTreeMap<MarkId, Mark>,
+}
+
+/// 标记：人或 AI 在素材上打的有名刻度（素材坐标）。
+#[derive(Clone, Debug)]
+pub struct Mark {
+    pub shot: ShotId,
+    pub at: Tick,
+    pub by: String,
 }
 
 #[derive(Clone, Debug)]
@@ -130,6 +144,8 @@ pub struct Shot {
     pub src: String,
     pub src_in: Tick,
     pub src_out: Tick,
+    /// 可剪点（素材坐标，升序）：截取画面时出点优先落在这里
+    pub cut_points: Vec<Tick>,
 }
 
 impl Shot {
@@ -184,10 +200,95 @@ pub struct AnchorSpec {
     pub offset: Tick,
 }
 
+/// 补丁作用在节拍里的哪个元素上。
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Slot {
+    Voice,
+    Visual(usize),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Patch {
+    /// 裁头：入点挪到锚点，素材入点按播放速度同步挪动
+    CutIn,
+    /// 裁尾：出点挪到锚点
+    CutOut,
+    /// 渲染属性（曝光等），原样传给渲染器
+    Attrs(BTreeMap<String, String>),
+}
+
 #[derive(Clone, Debug)]
 pub struct Override {
     pub anchor: AnchorSpec,
     pub alt: Vec<AnchorSpec>,
     pub target: String,
+    pub beat: BeatId,
+    pub slot: Slot,
+    pub patch: Patch,
     pub by: String,
+}
+
+/// 规则的作用范围。字段都为空表示全片。
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct RuleScope {
+    pub section: Option<SectionId>,
+    pub beat: Option<BeatId>,
+    pub role: Option<Role>,
+}
+
+impl RuleScope {
+    /// 越具体越大：节拍 2 > 段落 1 > 全片 0。
+    pub fn specificity(&self) -> u8 {
+        if self.beat.is_some() {
+            2
+        } else if self.section.is_some() {
+            1
+        } else {
+            0
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RuleAction {
+    /// 画面入点吸附到最近的强拍
+    CutOnStrongBeat,
+}
+
+#[derive(Clone, Debug)]
+pub struct Rule {
+    pub scope: RuleScope,
+    pub action: RuleAction,
+    pub by: String,
+    pub examples: Vec<OverrideId>,
+}
+
+/// 冻结段里的一个片段。时间相对段落起点。
+#[derive(Clone, Debug)]
+pub struct FrozenClip {
+    pub id: String,
+    pub origin: BeatId,
+    pub track: String,
+    pub src: String,
+    pub src_in: Tick,
+    pub src_out: Tick,
+    pub rec_in: Tick,
+    pub rec_out: Tick,
+    pub attrs: BTreeMap<String, String>,
+    pub patches: Vec<String>,
+    pub rules: Vec<String>,
+}
+
+#[derive(Clone, Debug)]
+pub struct Frozen {
+    pub dur: Tick,
+    pub solver: String,
+    pub clips: Vec<FrozenClip>,
+}
+
+/// 求解器版本锁：确认时的版本和每个区的结果哈希。
+#[derive(Clone, Debug)]
+pub struct SolverLock {
+    pub solver: String,
+    pub zones: BTreeMap<SectionId, String>,
 }
