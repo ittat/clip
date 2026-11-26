@@ -11,6 +11,7 @@
       "reasons": [
         "停顿拉长 0.4s：0.4s → 0.8s"
       ],
+      "snap": 0,
       "visuals": [
         {
           "fill": "cut",
@@ -40,6 +41,7 @@
         "停顿拉长 0.36s：0.4s → 0.76s",
         "visual[1] shot:B.2 慢放 20.0%：素材 2.5s 撑满 3s"
       ],
+      "snap": 0,
       "visuals": [
         {
           "fill": "cut",
@@ -75,6 +77,7 @@
       "reasons": [
         "停顿拉长 0.4s：0.6s → 1s"
       ],
+      "snap": 0,
       "visuals": [
         {
           "fill": "cut",
@@ -212,10 +215,7 @@
       "tail_gap": 395136000
     }
   },
-  "not_applied": [
-    "music.snap",
-    "visual.cut_points"
-  ],
+  "not_applied": [],
   "patches": {
     "ov1": {
       "alt": [],
@@ -292,7 +292,7 @@
       "budget_kind": "derived",
       "dur": 2257920000,
       "frozen": false,
-      "hash": "8b44e16fc700aa25",
+      "hash": "253d76f425658811",
       "l4_absorbed": true,
       "lent": [],
       "natural": 1975680000,
@@ -309,7 +309,7 @@
       "budget_kind": "declared",
       "dur": 6039936000,
       "frozen": false,
-      "hash": "7b4d738c3cb6e150",
+      "hash": "7f472bfaecb7a630",
       "l4_absorbed": true,
       "lent": [],
       "natural": 5503680000,
@@ -317,7 +317,20 @@
       "start": 2257920000
     }
   },
-  "solver": "zone-5",
+  "slips": {},
+  "snaps": [
+    {
+      "beat": "S2.b2",
+      "delta": -395136000,
+      "from": 8297856000,
+      "kind": "music_end",
+      "music": "M1",
+      "next": null,
+      "status": "conflict",
+      "to": 7902720000
+    }
+  ],
+  "solver": "zone-6",
   "solver_lock": null,
   "status": "conflict",
   "total": 8297856000,

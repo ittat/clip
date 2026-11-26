@@ -128,6 +128,15 @@ pub struct Media {
     pub shots: BTreeMap<ShotId, Shot>,
     pub events: BTreeMap<EventId, Event>,
     pub music: BTreeMap<MusicId, Music>,
+    pub marks: BTreeMap<MarkId, Mark>,
+}
+
+/// 标记：人或 AI 在素材上打的有名刻度（素材坐标）。
+#[derive(Clone, Debug)]
+pub struct Mark {
+    pub shot: ShotId,
+    pub at: Tick,
+    pub by: String,
 }
 
 #[derive(Clone, Debug)]
@@ -135,6 +144,8 @@ pub struct Shot {
     pub src: String,
     pub src_in: Tick,
     pub src_out: Tick,
+    /// 可剪点（素材坐标，升序）：截取画面时出点优先落在这里
+    pub cut_points: Vec<Tick>,
 }
 
 impl Shot {

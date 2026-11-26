@@ -29,6 +29,8 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Cmd {
+    /// 生成一个能直接编译的空工程骨架
+    Init { dir: PathBuf },
     /// 编译工程：只读源文件，只写 build/
     Compile {
         dir: PathBuf,
@@ -119,6 +121,7 @@ fn main() -> ExitCode {
         Cmd::Golden {
             cmd: GoldenCmd::Bless { case, root },
         } => golden::bless(&root, &case),
+        Cmd::Init { dir } => init_cmd(&dir),
         Cmd::Validate { dir, json } => validate_cmd(&dir, json),
         Cmd::Explain { dir, section } => explain_cmd(&dir, section.as_deref()),
         Cmd::Diff { a, b, json } => diff::run(&a, &b, json),
@@ -156,6 +159,62 @@ fn compile_error(e: CompileError) -> ExitCode {
             ExitCode::from(EXIT_INTERNAL)
         }
     }
+}
+
+/// `clip init` 写入的文件：一个段落、一个只有停顿的节拍，能直接编译通过。
+pub const INIT_FILES: &[(&str, &str)] = &[
+    (
+        "project.yaml",
+        "format: 1\nfps: 25            # 整数，或 \"30000/1001\"\nsample_rate: 48000\nsolver: \"0.0.1\"\n",
+    ),
+    (
+        "intent.yaml",
+        "goal: 新工程\nduration: {target: 1s, tol: 10%}\nmust: []\nforbid: []\n",
+    ),
+    (
+        "structure.yaml",
+        "sequence: [S1]\nsections:\n  S1:\n    role: opening\n    beats: [S1.b1]\n",
+    ),
+    (
+        "content.yaml",
+        "beats:\n  S1.b1:\n    pause: {after: 1s, flex: 0.5s..2s}\n",
+    ),
+    ("narration.yaml", "{}\n"),
+    ("voices.yaml", "{}\n"),
+    ("overrides.yaml", "{}\n"),
+    ("rules.yaml", "{}\n"),
+    ("queue.yaml", "items: {}\n"),
+    ("media/index.yaml", "shots: {}\nevents: {}\nmusic: {}\nmarks: {}\n"),
+    ("locks/tts.lock.json", "{\n  \"entries\": {},\n  \"format\": 1\n}\n"),
+];
+
+fn init_cmd(dir: &Path) -> ExitCode {
+    if dir.join("project.yaml").exists() {
+        eprintln!(
+            "{} 已经是一个工程（有 project.yaml），不覆盖",
+            dir.display()
+        );
+        return ExitCode::from(EXIT_FORMAT);
+    }
+    for (name, text) in INIT_FILES {
+        let path = dir.join(name);
+        if let Some(parent) = path.parent() {
+            if let Err(e) = std::fs::create_dir_all(parent) {
+                eprintln!("创建目录失败：{e}");
+                return ExitCode::from(EXIT_INTERNAL);
+            }
+        }
+        if let Err(e) = std::fs::write(&path, text) {
+            eprintln!("写入 {} 失败：{e}", path.display());
+            return ExitCode::from(EXIT_INTERNAL);
+        }
+    }
+    println!(
+        "已在 {} 生成工程骨架。下一步：clip compile {}",
+        dir.display(),
+        dir.display()
+    );
+    ExitCode::SUCCESS
 }
 
 fn validate_cmd(dir: &Path, json: bool) -> ExitCode {
@@ -395,5 +454,20 @@ fn compile_cmd(dir: &Path, json: bool) -> ExitCode {
             eprintln!("{e}");
             ExitCode::from(EXIT_INTERNAL)
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn init_skeleton_compiles() {
+        let mut src = SourceSet::default();
+        for (name, text) in INIT_FILES {
+            src.insert(name, (*text).to_string());
+        }
+        let out = compile(&src).expect("骨架必须能编译");
+        assert_eq!(out.status, Status::Ok);
     }
 }

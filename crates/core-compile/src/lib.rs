@@ -4,9 +4,9 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use core_model::*;
 use core_solver::{
-    body_min, max_total, min_elements, solve, BeatInput, BeatPlacement, FillKind, Part, PauseInput,
-    SolveInput, SolveOutput, VisualInput, VisualKind, ZoneInput, ZonePlacement, MAX_RETIME_PERCENT,
-    UNIT_SPEED,
+    body_min, max_total, min_elements, solve, BeatInput, BeatPlacement, FillKind, MusicInput, Part,
+    PauseInput, SolveInput, SolveOutput, VisualInput, VisualKind, ZoneInput, ZonePlacement,
+    MAX_RETIME_PERCENT, UNIT_SPEED,
 };
 use core_store::{canon, load, LoadErrors, SourceSet};
 use serde_json::{json, Value};
@@ -117,9 +117,41 @@ fn solve_input(p: &Project) -> SolveInput {
             }
         })
         .collect();
+    // 用到每段音乐的第一个、最后一个节拍（冻结段不算）
+    // （第一个用到它的节拍, 最后一个用到它的节拍, 延后进入）
+    type Cue = ((usize, usize), (usize, usize), Tick);
+    let mut cues: BTreeMap<MusicId, Cue> = BTreeMap::new();
+    for (zi, sid) in p.sequence.iter().enumerate() {
+        if p.frozen.contains_key(sid) {
+            continue;
+        }
+        for (bi, bid) in p.sections[sid].beats.iter().enumerate() {
+            if let Some(mu) = &p.beats[bid].music {
+                cues.entry(mu.cue.clone())
+                    .and_modify(|e| e.1 = (zi, bi))
+                    .or_insert(((zi, bi), (zi, bi), mu.start.unwrap_or(Tick::ZERO)));
+            }
+        }
+    }
+    let music = cues
+        .into_iter()
+        .map(|(id, (first, last, start))| {
+            let m = &p.media.music[&id];
+            MusicInput {
+                id,
+                first,
+                last,
+                start,
+                beat: m.beat,
+                meter: m.meter,
+                bars: m.bars,
+            }
+        })
+        .collect();
     SolveInput {
         zones,
         window: p.intent.window(),
+        music,
     }
 }
 
@@ -405,7 +437,10 @@ impl Resolver<'_> {
                 self.shot_pos(shot, s.src_in + *off, prefer)?
             }
             Anchor::Bar(b) => self.music.get(&b.music)?.bar_pos(b),
-            Anchor::Mark(_) => return None,
+            Anchor::Mark(m) => {
+                let mk = self.p.media.marks.get(m)?;
+                self.shot_pos(&mk.shot, mk.at, prefer)?
+            }
         };
         Some(at + spec.offset)
     }
@@ -467,6 +502,7 @@ struct Assembled {
     patches: Value,
     music: Value,
     rules: Value,
+    slips: Value,
     conflicts: Vec<Value>,
 }
 
@@ -664,6 +700,7 @@ fn apply_rules(
 fn assemble(p: &Project, out: &SolveOutput, warnings: &mut Vec<Value>) -> Assembled {
     // 1. 求解结果 → 片段
     let mut clips: Vec<Clip> = Vec::new();
+    let mut slips = serde_json::Map::new();
     for pl in all_beats(out) {
         let b = &p.beats[&pl.id];
         if let (Some(v), Some(vp)) = (&b.voice, pl.voice) {
@@ -694,6 +731,29 @@ fn assemble(p: &Project, out: &SolveOutput, warnings: &mut Vec<Value>) -> Assemb
                     "missing": t(vp.missing),
                 }));
             }
+            // D-8：截取画面时平移素材窗口，让出点落在最近的可剪点上（时间线上的时长和位置不变）
+            let mut src_in = shot.src_in;
+            if vp.fill == FillKind::Cut {
+                let out0 = shot.src_in + vp.src_len;
+                let cp = shot
+                    .cut_points
+                    .iter()
+                    .copied()
+                    .filter(|&c| c > out0 && c <= shot.src_out)
+                    .min();
+                if let Some(cp) = cp {
+                    src_in = src_in + (cp - out0);
+                    slips.insert(
+                        clip_key(&pl.id, Slot::Visual(i)),
+                        json!({
+                            "shot": vis.shot.as_str(),
+                            "cut_point": t(cp),
+                            "shift": t(cp - out0),
+                            "src_in": [t(shot.src_in), t(src_in)],
+                        }),
+                    );
+                }
+            }
             clips.push(Clip {
                 id: clip_key(&pl.id, Slot::Visual(i)),
                 origin: pl.id.clone(),
@@ -703,7 +763,7 @@ fn assemble(p: &Project, out: &SolveOutput, warnings: &mut Vec<Value>) -> Assemb
                 },
                 src: shot.src.clone(),
                 shot: Some(vis.shot.clone()),
-                src_in: shot.src_in,
+                src_in,
                 src_len: vp.src_len,
                 rec_in: pl.start + vp.offset,
                 rec_len: vp.rec_len,
@@ -960,6 +1020,7 @@ fn assemble(p: &Project, out: &SolveOutput, warnings: &mut Vec<Value>) -> Assemb
         patches: Value::Object(patches),
         music: Value::Object(music_report),
         rules,
+        slips: Value::Object(slips),
         conflicts,
     }
 }
@@ -986,21 +1047,28 @@ fn ppm_to_permille(delta_ppm: i64) -> i64 {
 fn reasons(p: &Project, pl: &BeatPlacement) -> Vec<String> {
     let b = &p.beats[&pl.id];
     let mut out = Vec::new();
-    if pl.pause < pl.pause_natural {
+    // 停顿的变化分两部分报告：求解（压缩/拉长）和吸附，不重复
+    let solved = pl.pause - pl.snap;
+    if solved < pl.pause_natural {
         out.push(format!(
             "停顿压缩 {}：{} → {}",
-            human(pl.pause_natural - pl.pause),
+            human(pl.pause_natural - solved),
             human(pl.pause_natural),
-            human(pl.pause)
+            human(solved)
         ));
     }
-    if pl.pause > pl.pause_natural {
+    if solved > pl.pause_natural {
         out.push(format!(
             "停顿拉长 {}：{} → {}",
-            human(pl.pause - pl.pause_natural),
+            human(solved - pl.pause_natural),
             human(pl.pause_natural),
-            human(pl.pause)
+            human(solved)
         ));
+    }
+    if pl.snap != Tick::ZERO {
+        let sign = if pl.snap > Tick::ZERO { "+" } else { "-" };
+        let abs = Tick(pl.snap.flicks().abs());
+        out.push(format!("切点吸附到拍子：停顿 {sign}{}", human(abs)));
     }
     if pl.elastic_shrink > Tick::ZERO {
         out.push(format!("画面主体缩短 {}", human(pl.elastic_shrink)));
@@ -1081,6 +1149,7 @@ fn beat_report(p: &Project, zone: &ZonePlacement, pl: &BeatPlacement) -> Value {
         "visuals": visuals,
         "cost": nonzero_terms(&pl.cost),
         "reasons": reasons(p, pl),
+        "snap": t(pl.snap),
     })
 }
 
@@ -1531,8 +1600,23 @@ fn report(
     };
 
     // 还没有执行的约束要如实列出，避免“静默忽略”
-    let mut not_applied = vec!["music.snap".to_string()];
-    not_applied.push("visual.cut_points".to_string());
+    let not_applied: Vec<String> = Vec::new();
+    let snaps: Vec<Value> = out
+        .snaps
+        .iter()
+        .map(|s| {
+            json!({
+                "kind": s.kind.as_str(),
+                "music": s.music.as_str(),
+                "beat": s.beat.as_str(),
+                "next": s.next.as_ref().map(SectionId::as_str),
+                "from": t(s.from),
+                "to": t(s.to),
+                "delta": t(s.to - s.from),
+                "status": s.status.as_str(),
+            })
+        })
+        .collect();
 
     let status = match status {
         Status::Ok => "ok",
@@ -1560,6 +1644,8 @@ fn report(
         "patches": asm.patches,
         "music": asm.music,
         "rules": asm.rules,
+        "slips": asm.slips,
+        "snaps": snaps,
         "solver_lock": solver_lock,
         "tts_resynth_needed": resynth,
         "warnings": warnings,
@@ -1702,7 +1788,16 @@ pub fn explain(r: &Value, only: Option<&str>) -> String {
     let terms: Vec<String> = list(&r["cost"])
         .iter()
         .filter(|x| x[1].as_u64().is_some_and(|v| v > 0))
-        .map(|x| format!("{}={}", x[0].as_str().unwrap_or("?"), x[1]))
+        .map(|x| {
+            let name = x[0].as_str().unwrap_or("?");
+            let v = x[1].as_i64().unwrap_or(0);
+            let shown = match name {
+                "intent" | "declared_budget" | "trim" | "pause" => human(Tick(v)),
+                "rate" => format!("+{}（各句合计）", percent_text(ppm_to_permille(v))),
+                _ => v.to_string(),
+            };
+            format!("{name} {shown}")
+        })
         .collect();
     if terms.is_empty() {
         s.push_str("\n代价：全部为 0\n");
@@ -1766,6 +1861,44 @@ pub fn explain(r: &Value, only: Option<&str>) -> String {
                     rule_status_text(&c, &tk)
                 ));
             }
+        }
+    }
+    let snaps = list(&r["snaps"]);
+    if !snaps.is_empty() {
+        s.push_str("\n吸附：\n");
+    }
+    for x in &snaps {
+        let what = if x["kind"].as_str() == Some("music_end") {
+            format!("{} 片尾 → 小节线", x["music"].as_str().unwrap_or("?"))
+        } else {
+            format!("切点 {} → 强拍", x["next"].as_str().unwrap_or("?"))
+        };
+        let st = match x["status"].as_str().unwrap_or("") {
+            "snapped" => format!(
+                "{} → {}（调 {} 的停顿）",
+                tk(&x["from"]),
+                tk(&x["to"]),
+                x["beat"].as_str().unwrap_or("?")
+            ),
+            "aligned" => "已经对齐".to_string(),
+            "too_far" => format!("差 {}，超过 0.3s，不吸附", tk(&x["delta"])),
+            "pause_limit" => "超出停顿的 flex 区间，不吸附".to_string(),
+            "visual_limit" => "拉长后画面撑不满，不吸附".to_string(),
+            "budget" => "会超出声明预算，不吸附".to_string(),
+            "intent" => "会超出 L4 区间，不吸附".to_string(),
+            "frozen" => "切点前是冻结段，不吸附".to_string(),
+            "conflict" => "全片有必须处理的冲突，先不吸附".to_string(),
+            other => other.to_string(),
+        };
+        s.push_str(&format!("  {what}：{st}\n"));
+    }
+    if let Some(slips) = r["slips"].as_object() {
+        for (clip, v) in slips {
+            s.push_str(&format!(
+                "  {clip} 素材窗口后移 {}，出点对齐可剪点 {}\n",
+                tk(&v["shift"]),
+                tk(&v["cut_point"])
+            ));
         }
     }
     if let Some(patches) = r["patches"].as_object() {

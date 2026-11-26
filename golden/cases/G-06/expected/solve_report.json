@@ -13,6 +13,7 @@
         "停顿压缩 0.2s：0.4s → 0.2s",
         "语速 +8.0%：旁白 2.4s → 2.222s（需要重新合成 TTS）"
       ],
+      "snap": 0,
       "visuals": [
         {
           "fill": "cut",
@@ -44,6 +45,7 @@
         "语速 +8.0%：旁白 7.2s → 6.667s（需要重新合成 TTS）",
         "visual[1] shot:B.2 慢放到上限 20% 仍缺 1.348s"
       ],
+      "snap": 0,
       "visuals": [
         {
           "fill": "cut",
@@ -81,6 +83,7 @@
         "停顿压缩 0.4s：0.6s → 0.2s",
         "语速 +8.0%：旁白 3.2s → 2.963s（需要重新合成 TTS）"
       ],
+      "snap": 0,
       "visuals": [
         {
           "fill": "cut",
@@ -250,10 +253,7 @@
       "tail_gap": 20906667
     }
   },
-  "not_applied": [
-    "music.snap",
-    "visual.cut_points"
-  ],
+  "not_applied": [],
   "patches": {
     "ov1": {
       "alt": [],
@@ -330,7 +330,7 @@
       "budget_kind": "derived",
       "dur": 1709120000,
       "frozen": false,
-      "hash": "f4a26e7452a12082",
+      "hash": "ad8ee3d77a76c222",
       "l4_absorbed": true,
       "lent": [],
       "natural": 1975680000,
@@ -347,7 +347,7 @@
       "budget_kind": "declared",
       "dur": 7076906667,
       "frozen": false,
-      "hash": "ad89ce56006434f6",
+      "hash": "af1373089c859324",
       "l4_absorbed": false,
       "lent": [],
       "natural": 8043840000,
@@ -355,7 +355,20 @@
       "start": 1709120000
     }
   },
-  "solver": "zone-5",
+  "slips": {},
+  "snaps": [
+    {
+      "beat": "S2.b2",
+      "delta": -20906667,
+      "from": 8786026667,
+      "kind": "music_end",
+      "music": "M1",
+      "next": null,
+      "status": "conflict",
+      "to": 8765120000
+    }
+  ],
+  "solver": "zone-6",
   "solver_lock": null,
   "status": "conflict",
   "total": 8786026667,

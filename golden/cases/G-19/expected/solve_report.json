@@ -1,0 +1,288 @@
+{
+  "beats": {
+    "S1.b1": {
+      "body": 1693440000,
+      "cost": {},
+      "dur": 1975680000,
+      "offset": 0,
+      "pause": 282240000,
+      "reasons": [],
+      "snap": 0,
+      "visuals": [
+        {
+          "fill": "cut",
+          "index": 0,
+          "missing": 0,
+          "offset": 0,
+          "rec_len": 1975680000,
+          "src_len": 1975680000
+        }
+      ],
+      "voice": {
+        "len": 1693440000,
+        "natural": 1693440000,
+        "speed_ppm": 1000000
+      }
+    },
+    "S2.b1": {
+      "body": 2540160000,
+      "cost": {
+        "trim": 98784000
+      },
+      "dur": 2822400000,
+      "offset": 0,
+      "pause": 282240000,
+      "reasons": [
+        "visual[1] shot:B.2 慢放 5.6%：素材 2.5s 撑满 2.64s"
+      ],
+      "snap": 0,
+      "visuals": [
+        {
+          "fill": "cut",
+          "index": 0,
+          "missing": 0,
+          "offset": 0,
+          "rec_len": 2822400000,
+          "src_len": 2822400000
+        },
+        {
+          "fill": "retime",
+          "index": 1,
+          "missing": 0,
+          "offset": 959616000,
+          "rec_len": 1862784000,
+          "src_len": 1764000000
+        }
+      ],
+      "voice": {
+        "len": 2540160000,
+        "natural": 2540160000,
+        "speed_ppm": 1000000
+      }
+    },
+    "S2.b2": {
+      "body": 2257920000,
+      "cost": {
+        "pause": 141120000
+      },
+      "dur": 2822400000,
+      "offset": 2822400000,
+      "pause": 564480000,
+      "reasons": [
+        "切点吸附到拍子：停顿 +0.2s"
+      ],
+      "snap": 141120000,
+      "visuals": [
+        {
+          "fill": "cut",
+          "index": 0,
+          "missing": 0,
+          "offset": 0,
+          "rec_len": 2822400000,
+          "src_len": 2822400000
+        }
+      ],
+      "voice": {
+        "len": 2257920000,
+        "natural": 2257920000,
+        "speed_ppm": 1000000
+      }
+    }
+  },
+  "conflicts": [],
+  "cost": [
+    [
+      "hard",
+      0
+    ],
+    [
+      "human_lock",
+      0
+    ],
+    [
+      "intent",
+      0
+    ],
+    [
+      "meaning",
+      0
+    ],
+    [
+      "declared_budget",
+      0
+    ],
+    [
+      "cross_zone",
+      0
+    ],
+    [
+      "rate",
+      0
+    ],
+    [
+      "trim",
+      98784000
+    ],
+    [
+      "pause",
+      141120000
+    ],
+    [
+      "diff_from_prev",
+      0
+    ]
+  ],
+  "format": 1,
+  "intent": {
+    "max": 8537760000,
+    "min": 6985440000,
+    "over": 0,
+    "target": 7761600000,
+    "under": 0,
+    "within": true
+  },
+  "music": {
+    "M1": {
+      "bars_used": 4,
+      "beats": [
+        "S2.b1",
+        "S2.b2"
+      ],
+      "end": 7620480000,
+      "span_end": 7620480000,
+      "start": 1975680000,
+      "tail_gap": 0
+    }
+  },
+  "not_applied": [],
+  "patches": {
+    "ov1": {
+      "alt": [],
+      "alt_coincide": false,
+      "anchor": "n:S2.1.w2",
+      "applied_at": 2399040000,
+      "at": 2399040000,
+      "by": "human",
+      "offset": 0,
+      "op": "attrs",
+      "resolved_by": null,
+      "status": "applied",
+      "target": "S2.b1.visual[1]"
+    },
+    "ov2": {
+      "alt": [
+        {
+          "anchor": "ev:B.2.1",
+          "at": 4094512128,
+          "delta": 2032128,
+          "offset": 56448000
+        }
+      ],
+      "alt_coincide": true,
+      "anchor": "bar:M1.2.b3",
+      "applied_at": 4092480000,
+      "at": 4092480000,
+      "by": "human",
+      "offset": 0,
+      "op": "cut_in",
+      "resolved_by": null,
+      "status": "applied",
+      "target": "S2.b1.visual[1]"
+    },
+    "ov3": {
+      "alt": [],
+      "alt_coincide": false,
+      "anchor": "shot:B.3@1s",
+      "applied_at": 5150880000,
+      "at": 5150880000,
+      "by": "human",
+      "offset": 0,
+      "op": "attrs",
+      "resolved_by": null,
+      "status": "applied",
+      "target": "S2.b2.visual[0]"
+    }
+  },
+  "project_solver": "0.0.1",
+  "rules": {
+    "r:1": {
+      "by": "human",
+      "clips": [
+        {
+          "clip": "S2.b2/visual[0]",
+          "status": "aligned"
+        }
+      ],
+      "do": "cut_on: beat.strong",
+      "scope": {
+        "beat": "S2.b2",
+        "role": "b-roll",
+        "section": null
+      }
+    }
+  },
+  "sections": {
+    "S1": {
+      "beats": [
+        "S1.b1"
+      ],
+      "borrowed": [],
+      "budget": null,
+      "budget_kind": "derived",
+      "dur": 1975680000,
+      "frozen": false,
+      "hash": "964ac47f94d1f8bd",
+      "l4_absorbed": false,
+      "lent": [],
+      "natural": 1975680000,
+      "over": null,
+      "start": 0
+    },
+    "S2": {
+      "beats": [
+        "S2.b1",
+        "S2.b2"
+      ],
+      "borrowed": [],
+      "budget": 5644800000,
+      "budget_kind": "declared",
+      "dur": 5644800000,
+      "frozen": false,
+      "hash": "4dfa62163914bc0d",
+      "l4_absorbed": false,
+      "lent": [],
+      "natural": 5503680000,
+      "over": 0,
+      "start": 1975680000
+    }
+  },
+  "slips": {
+    "S2.b2/visual[0]": {
+      "cut_point": 11642400000,
+      "shift": 352800000,
+      "shot": "shot:B.3",
+      "src_in": [
+        8467200000,
+        8820000000
+      ]
+    }
+  },
+  "snaps": [
+    {
+      "beat": "S2.b2",
+      "delta": 141120000,
+      "from": 7479360000,
+      "kind": "music_end",
+      "music": "M1",
+      "next": null,
+      "status": "snapped",
+      "to": 7620480000
+    }
+  ],
+  "solver": "zone-6",
+  "solver_lock": null,
+  "status": "ok",
+  "total": 7620480000,
+  "tts_resynth_needed": [],
+  "warnings": []
+}

@@ -1,0 +1,15 @@
+id: G-19
+title: 截取画面时平移素材窗口，出点对齐可剪点；素材偏移锚点跟着画面走
+kind: compile
+fixture: min_explainer
+expect_status: ok
+# S2.b2 的 B-roll 用 B.3 的 4s（12s 起，出点 16s）；可剪点 16.5s → 素材窗口后移 0.5s。
+# 时间线上的时长和位置不变；ov3 挂在 shot:B.3@+1s（素材 13s），画面后移后它出现在 7.3s
+expect_report:
+  - {path: [slips, "S2.b2/visual[0]", shift], equals: 352800000}
+  - {path: [slips, "S2.b2/visual[0]", cut_point], equals: 11642400000}
+  - {path: [patches, ov3, at], equals: 5150880000}
+overlay:
+  media/index.yaml:
+    shots:
+      "shot:B.3": {cut_points: [16.5s]}

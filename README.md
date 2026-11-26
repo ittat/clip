@@ -3,6 +3,14 @@
 PR 1 只做骨架：**先立起测试框架和确定性检查，求解器是朴素实现**（节拍按自然长度顺排，不伸缩、不计代价）。
 后续 PR 在同样的接口下替换真实逻辑，黄金用例保证每一步的行为变化都看得见。
 
+## 文档
+
+- [设计文档 v0.2](docs/design.md)：架构、数据模型、求解规则、阶段 0 的全部决定
+- [设计摘要](docs/summary.md)：2 页总览
+- [上岗考试题库 v0.7](docs/exam.md)：阶段 1 的 AI 考试
+
+**规则：改代码的行为时，同一个 PR 里同步改 `docs/design.md`。**
+
 ## 结构
 
 ```
@@ -37,11 +45,17 @@ cargo run -p clip -- golden run
 - 编译 API 的输入是内存里的 `SourceSet`，不读文件系统、不读 `build/`
 - CI 在 Linux、macOS、Windows 上跑同一套黄金用例；`.gitattributes` 统一 LF
 
-## 阶段 0 完成（`solver: zone-5`）
+## 阶段 0 完成（`solver: zone-6`）
+
+- **吸附**（D-7）：音乐覆盖范围内的段落切点吸附到强拍、片尾对齐小节线，靠调前一个节拍的停顿（±0.3s，受 flex、预算、L4 限制）；报告 `snaps`
+- **可剪点**（D-8）：镜头的 `cut_points`；截取画面时平移素材窗口，出点对齐可剪点，时间线不变；报告 `slips`
+- **标记**（D-9）：`media/index.yaml` 的 `marks`，`mk:` 锚点可用
+- `clip init` 生成能直接编译的空工程
 
 ### CLI
 | 命令 | 作用 |
 |---|---|
+| `clip init <dir>` | 生成能直接编译的空工程骨架 |
 | `clip compile <dir>` | 编译：只读源文件，只写 `build/` |
 | `clip validate <dir>` | 只加载和校验工程，不编译；错误带位置和修复建议 |
 | `clip explain <dir> [--ref S2]` | 把求解报告整理成人能读的说明 |
@@ -83,6 +97,6 @@ cargo run -p clip -- golden run
 
 ## 已知限制（都会出现在 `solve_report.json` 的 `not_applied` 里）
 
-- 音乐切点吸附强拍（`music.snap`）还没做；冻结段里的音乐不会随段落保存
+- 冻结段里的音乐不随段落保存（D-10，按设计）
 - 规划模式（还没有内容时按 `role` 权重分配预算）推迟到阶段 1
 - `visual.cut_points`：截取画面时直接取前段，还没有对齐可剪点

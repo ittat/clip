@@ -107,6 +107,15 @@ impl EventId {
     }
 }
 
+impl MarkId {
+    /// 标记所属的镜头（标记 ID 的前半部分）。
+    pub fn shot(&self) -> ShotId {
+        let body = &self.0["mk:".len()..];
+        let (shot, _) = body.rsplit_once('.').expect("已校验");
+        ShotId(format!("shot:{shot}"))
+    }
+}
+
 /// 旁白里的一个词：`n:S2.1.w5`（词序号从 1 开始）。
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct WordRef {

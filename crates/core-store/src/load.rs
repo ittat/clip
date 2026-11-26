@@ -217,6 +217,16 @@ mod raw {
         pub events: BTreeMap<String, Event>,
         #[serde(default)]
         pub music: BTreeMap<String, Music>,
+        #[serde(default)]
+        pub marks: BTreeMap<String, Mark>,
+    }
+
+    #[derive(Deserialize)]
+    #[serde(deny_unknown_fields)]
+    pub struct Mark {
+        pub shot: String,
+        pub at: String,
+        pub by: String,
     }
 
     #[derive(Deserialize)]
@@ -229,6 +239,8 @@ mod raw {
         pub src_out: String,
         #[serde(default)]
         pub desc: BTreeMap<String, String>,
+        #[serde(default)]
+        pub cut_points: Vec<String>,
     }
 
     #[derive(Deserialize)]
@@ -617,17 +629,35 @@ fn build_media(cx: &mut Ctx, raw: raw::Media, fps: &Fps) -> Media {
         let id = cx.id(F, &k, ShotId::parse(&k));
         let a = cx.dur(F, &format!("{k}.in"), &s.src_in, fps);
         let b = cx.dur(F, &format!("{k}.out"), &s.src_out, fps);
+        let mut cut_points = Vec::new();
+        for (i, c) in s.cut_points.iter().enumerate() {
+            if let Some(x) = cx.dur(F, &format!("{k}.cut_points[{i}]"), c, fps) {
+                cut_points.push(x);
+            }
+        }
         if let (Some(id), Some(a), Some(b)) = (id, a, b) {
             if b <= a {
                 cx.err(F, &k, "out 必须大于 in", None);
                 continue;
             }
+            if cut_points.iter().any(|&c| c < a || c > b) {
+                cx.err(
+                    F,
+                    &format!("{k}.cut_points"),
+                    "可剪点必须在镜头的 in/out 之间（素材坐标）",
+                    None,
+                );
+                continue;
+            }
+            cut_points.sort();
+            cut_points.dedup();
             m.shots.insert(
                 id,
                 Shot {
                     src: s.src,
                     src_in: a,
                     src_out: b,
+                    cut_points,
                 },
             );
         }
@@ -665,6 +695,53 @@ fn build_media(cx: &mut Ctx, raw: raw::Media, fps: &Fps) -> Media {
                         shot,
                         at,
                         kind: e.kind,
+                    },
+                );
+            }
+        }
+    }
+    for (k, mk) in raw.marks {
+        let id = cx.id(F, &k, MarkId::parse(&k));
+        let shot = cx.id(F, &format!("{k}.shot"), ShotId::parse(&mk.shot));
+        let at = cx.dur(F, &format!("{k}.at"), &mk.at, fps);
+        let (Some(id), Some(shot), Some(at)) = (id, shot, at) else {
+            continue;
+        };
+        if id.shot() != shot {
+            cx.err(
+                F,
+                &k,
+                format!("标记 ID 属于 {}，但 shot 写的是 {shot}", id.shot()),
+                Some("标记 ID 的前半部分必须是所属镜头"),
+            );
+            continue;
+        }
+        if !valid_author(&mk.by) {
+            cx.err(
+                F,
+                &format!("{k}.by"),
+                format!("未知作者 `{}`", mk.by),
+                Some("可选：human、ai、ai:<名字>"),
+            );
+            continue;
+        }
+        match m.shots.get(&shot) {
+            None => cx.err(F, &format!("{k}.shot"), format!("镜头 {shot} 不存在"), None),
+            Some(s) if at < s.src_in || at >= s.src_out => {
+                cx.err(
+                    F,
+                    &format!("{k}.at"),
+                    "标记时间不在镜头的 in/out 范围内",
+                    None,
+                );
+            }
+            Some(_) => {
+                m.marks.insert(
+                    id,
+                    Mark {
+                        shot,
+                        at,
+                        by: mk.by,
                     },
                 );
             }
@@ -1116,13 +1193,16 @@ fn anchor_spec(
             found
         }
         Anchor::Mark(m) => {
-            cx.err(
-                file,
-                at,
-                format!("标记 {m} 不存在"),
-                Some("阶段 0 的素材索引还没有标记表"),
-            );
-            false
+            let found = media.marks.contains_key(m);
+            if !found {
+                cx.err(
+                    file,
+                    at,
+                    format!("标记 {m} 不在素材索引中"),
+                    Some("在 media/index.yaml 的 marks 里添加"),
+                );
+            }
+            found
         }
         Anchor::Offset(s, off) => match media.shots.get(s) {
             None => {

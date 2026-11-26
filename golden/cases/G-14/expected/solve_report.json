@@ -7,6 +7,7 @@
       "offset": 0,
       "pause": 282240000,
       "reasons": [],
+      "snap": 0,
       "visuals": [
         {
           "fill": "cut",
@@ -34,6 +35,7 @@
       "reasons": [
         "visual[1] shot:B.2 慢放 5.6%：素材 2.5s 撑满 2.64s"
       ],
+      "snap": 0,
       "visuals": [
         {
           "fill": "cut",
@@ -65,6 +67,7 @@
       "offset": 2822400000,
       "pause": 423360000,
       "reasons": [],
+      "snap": 0,
       "visuals": [
         {
           "fill": "cut",
@@ -177,10 +180,7 @@
       "tail_gap": 1093680000
     }
   },
-  "not_applied": [
-    "music.snap",
-    "visual.cut_points"
-  ],
+  "not_applied": [],
   "patches": {
     "ov1": {
       "alt": [],
@@ -257,7 +257,7 @@
       "budget_kind": "derived",
       "dur": 1975680000,
       "frozen": false,
-      "hash": "8d7090790b5fcc71",
+      "hash": "964ac47f94d1f8bd",
       "l4_absorbed": false,
       "lent": [],
       "natural": 1975680000,
@@ -274,7 +274,7 @@
       "budget_kind": "declared",
       "dur": 5503680000,
       "frozen": false,
-      "hash": "30a99c641b130bcc",
+      "hash": "9d96e4cd78061f24",
       "l4_absorbed": false,
       "lent": [],
       "natural": 5503680000,
@@ -282,7 +282,20 @@
       "start": 1975680000
     }
   },
-  "solver": "zone-5",
+  "slips": {},
+  "snaps": [
+    {
+      "beat": "S2.b2",
+      "delta": 317520000,
+      "from": 7479360000,
+      "kind": "music_end",
+      "music": "M1",
+      "next": null,
+      "status": "too_far",
+      "to": 7796880000
+    }
+  ],
+  "solver": "zone-6",
   "solver_lock": null,
   "status": "ok",
   "total": 7479360000,

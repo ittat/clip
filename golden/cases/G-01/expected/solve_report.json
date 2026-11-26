@@ -7,6 +7,7 @@
       "offset": 0,
       "pause": 282240000,
       "reasons": [],
+      "snap": 0,
       "visuals": [
         {
           "fill": "cut",
@@ -34,6 +35,7 @@
       "reasons": [
         "visual[1] shot:B.2 慢放 5.6%：素材 2.5s 撑满 2.64s"
       ],
+      "snap": 0,
       "visuals": [
         {
           "fill": "cut",
@@ -60,19 +62,24 @@
     },
     "S2.b2": {
       "body": 2257920000,
-      "cost": {},
-      "dur": 2681280000,
+      "cost": {
+        "pause": 141120000
+      },
+      "dur": 2822400000,
       "offset": 2822400000,
-      "pause": 423360000,
-      "reasons": [],
+      "pause": 564480000,
+      "reasons": [
+        "切点吸附到拍子：停顿 +0.2s"
+      ],
+      "snap": 141120000,
       "visuals": [
         {
           "fill": "cut",
           "index": 0,
           "missing": 0,
           "offset": 0,
-          "rec_len": 2681280000,
-          "src_len": 2681280000
+          "rec_len": 2822400000,
+          "src_len": 2822400000
         }
       ],
       "voice": {
@@ -118,7 +125,7 @@
     ],
     [
       "pause",
-      0
+      141120000
     ],
     [
       "diff_from_prev",
@@ -136,21 +143,18 @@
   },
   "music": {
     "M1": {
-      "bars_used": 3,
+      "bars_used": 4,
       "beats": [
         "S2.b1",
         "S2.b2"
       ],
-      "end": 6209280000,
-      "span_end": 7479360000,
+      "end": 7620480000,
+      "span_end": 7620480000,
       "start": 1975680000,
-      "tail_gap": 1270080000
+      "tail_gap": 0
     }
   },
-  "not_applied": [
-    "music.snap",
-    "visual.cut_points"
-  ],
+  "not_applied": [],
   "patches": {
     "ov1": {
       "alt": [],
@@ -227,7 +231,7 @@
       "budget_kind": "derived",
       "dur": 1975680000,
       "frozen": false,
-      "hash": "8d7090790b5fcc71",
+      "hash": "964ac47f94d1f8bd",
       "l4_absorbed": false,
       "lent": [],
       "natural": 1975680000,
@@ -242,9 +246,9 @@
       "borrowed": [],
       "budget": 5644800000,
       "budget_kind": "declared",
-      "dur": 5503680000,
+      "dur": 5644800000,
       "frozen": false,
-      "hash": "bd2d119a46c81373",
+      "hash": "b3c3340d4710d3dd",
       "l4_absorbed": false,
       "lent": [],
       "natural": 5503680000,
@@ -252,10 +256,23 @@
       "start": 1975680000
     }
   },
-  "solver": "zone-5",
+  "slips": {},
+  "snaps": [
+    {
+      "beat": "S2.b2",
+      "delta": 141120000,
+      "from": 7479360000,
+      "kind": "music_end",
+      "music": "M1",
+      "next": null,
+      "status": "snapped",
+      "to": 7620480000
+    }
+  ],
+  "solver": "zone-6",
   "solver_lock": null,
   "status": "ok",
-  "total": 7479360000,
+  "total": 7620480000,
   "tts_resynth_needed": [],
   "warnings": []
 }

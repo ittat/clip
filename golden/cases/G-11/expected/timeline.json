@@ -1,11 +1,11 @@
 {
-  "duration": 7479360000,
+  "duration": 7620480000,
   "format": 1,
   "fps": {
     "den": 1,
     "num": 25
   },
-  "solver": "zone-5",
+  "solver": "zone-6",
   "tracks": {
     "A1": [
       {
@@ -44,11 +44,11 @@
         "id": "music/M1",
         "origin": "S2.b1",
         "rec_in": 1975680000,
-        "rec_out": 6209280000,
+        "rec_out": 7620480000,
         "speed_ppm": 1000000,
         "src": "media/m1.wav",
         "src_in": 0,
-        "src_out": 4233600000
+        "src_out": 5644800000
       }
     ],
     "V1": [
@@ -101,11 +101,11 @@
           "ov3"
         ],
         "rec_in": 4798080000,
-        "rec_out": 7479360000,
+        "rec_out": 7620480000,
         "speed_ppm": 1000000,
         "src": "media/b.mp4",
         "src_in": 8467200000,
-        "src_out": 11148480000
+        "src_out": 11289600000
       }
     ]
   },

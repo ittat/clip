@@ -1,0 +1,26 @@
+id: G-20
+title: mk 标记锚点：人和 AI 打的标记都能解析
+kind: compile
+fixture: min_explainer
+expect_status: ok
+# 标记在 B.3 的 13s（素材坐标），B.3 从 6.8s 起用 12s 之后的素材 → 7.8s
+expect_report:
+  - {path: [patches, ov4, status], equals: applied}
+  - {path: [patches, ov4, at], equals: 5503680000}
+  - {path: [patches, ov5, at], equals: 5644800000}
+overlay:
+  media/index.yaml:
+    marks:
+      "mk:B.3.chart": {shot: "shot:B.3", at: 13s, by: human}
+      "mk:B.3.pick": {shot: "shot:B.3", at: 13.2s, by: ai}
+  overrides.yaml:
+    ov4:
+      anchor: {at: "mk:B.3.chart"}
+      target: S2.b2.visual[0]
+      patch: {grade: warm}
+      by: human
+    ov5:
+      anchor: {at: "mk:B.3.pick"}
+      target: S2.b2.visual[0]
+      patch: {note: ai-pick}
+      by: ai
