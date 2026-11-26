@@ -1,0 +1,2 @@
+# 黄金用例逐字节比对：所有平台都用 LF，防止 Windows 检出时改成 CRLF
+* text=auto eol=lf

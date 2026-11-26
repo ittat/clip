@@ -1,0 +1,4 @@
+id: G-01
+title: 原始编译（基线）
+kind: compile
+fixture: min_explainer

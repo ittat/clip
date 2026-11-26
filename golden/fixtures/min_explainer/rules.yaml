@@ -1,0 +1,4 @@
+"r:1":
+  scope: {beat: S2.b2, role: b-roll}
+  do: {cut_on: beat.strong}
+  by: human

@@ -1,0 +1,4 @@
+id: G-02
+title: 幂等：编译结果再编译不变
+kind: idempotent
+fixture: min_explainer

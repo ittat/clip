@@ -1,0 +1,4 @@
+id: G-12
+title: 整数刻度往返 1000 次无漂移
+kind: tick_roundtrip
+iterations: 1000

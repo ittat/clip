@@ -1,0 +1,13 @@
+# 阶段 0 PR 1 只校验引用，不应用补丁（会列在 solve_report 的 not_applied 里）
+ov1:
+  anchor: {at: "n:S2.1.w2"}
+  target: S2.b1.visual[1]
+  patch: {exposure: "+0.3"}
+  by: human
+ov2:
+  anchor: {at: "bar:M1.3.b1", offset: 0f}
+  alt:
+    - {at: "ev:B.2.1", offset: +2f}
+  target: S2.b1.visual[1]
+  patch: {cut: in}
+  by: human

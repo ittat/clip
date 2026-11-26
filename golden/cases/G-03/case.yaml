@@ -1,0 +1,5 @@
+id: G-03
+title: 顺序无关：打乱 YAML 映射的键顺序
+kind: shuffle
+fixture: min_explainer
+seeds: 20

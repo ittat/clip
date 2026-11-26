@@ -1,0 +1,15 @@
+[package]
+name = "core-compile"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+core-model.workspace = true
+core-store.workspace = true
+core-solver.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+
+[lints]
+workspace = true

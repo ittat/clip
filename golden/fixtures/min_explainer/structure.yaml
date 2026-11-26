@@ -1,0 +1,10 @@
+# sequence 是成片顺序（有顺序语义）；sections 是以 ID 为键的映射（无顺序语义）
+sequence: [S1, S2]
+sections:
+  S1:
+    role: opening              # 预算不写：由求解得出
+    beats: [S1.b1]
+  S2:
+    role: argument
+    budget: 8s                 # 声明的预算
+    beats: [S2.b1, S2.b2]

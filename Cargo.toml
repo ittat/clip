@@ -1,0 +1,37 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/core-model",
+    "crates/core-store",
+    "crates/core-solver",
+    "crates/core-compile",
+    "crates/clip",
+]
+
+[workspace.package]
+version = "0.0.1"
+edition = "2021"
+publish = false
+
+[workspace.dependencies]
+core-model = { path = "crates/core-model" }
+core-store = { path = "crates/core-store" }
+core-solver = { path = "crates/core-solver" }
+core-compile = { path = "crates/core-compile" }
+serde = { version = "1", features = ["derive"] }
+# 不要开启 preserve_order：规范化输出依赖 Map 按键排序（CI 会检查）
+serde_json = "1"
+# serde_yaml 已停止维护。这里先用社区分支，版本号首次 `cargo update` 时核对后锁死
+serde_yaml_ng = "0.10"
+thiserror = "2"
+clap = { version = "4", features = ["derive"] }
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+# 确定性：禁止浮点运算、禁止无序容器、禁止读时钟
+float_arithmetic = "deny"
+float_cmp = "deny"
+disallowed_types = "deny"
+disallowed_methods = "deny"

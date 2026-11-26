@@ -1,0 +1,8 @@
+disallowed-types = [
+    { path = "std::collections::HashMap", reason = "遍历顺序不确定，用 BTreeMap" },
+    { path = "std::collections::HashSet", reason = "遍历顺序不确定，用 BTreeSet" },
+]
+disallowed-methods = [
+    { path = "std::time::SystemTime::now", reason = "编译结果不能依赖时钟" },
+    { path = "std::time::Instant::now", reason = "编译结果不能依赖时钟" },
+]

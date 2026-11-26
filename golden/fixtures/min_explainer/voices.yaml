@@ -1,0 +1,2 @@
+# 阶段 0 不调用真实 TTS，时长来自 locks/tts.lock.json 里的替身数据
+narrator: {provider: stub}

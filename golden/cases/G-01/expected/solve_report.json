@@ -1,0 +1,106 @@
+{
+  "beats": {
+    "S1.b1": {
+      "dur": 1975680000,
+      "hard": 1693440000,
+      "pause": 282240000,
+      "start": 0
+    },
+    "S2.b1": {
+      "dur": 2822400000,
+      "hard": 2540160000,
+      "pause": 282240000,
+      "start": 1975680000
+    },
+    "S2.b2": {
+      "dur": 2681280000,
+      "hard": 2257920000,
+      "pause": 423360000,
+      "start": 4798080000
+    }
+  },
+  "cost": [
+    [
+      "hard",
+      0
+    ],
+    [
+      "human_lock",
+      0
+    ],
+    [
+      "intent",
+      0
+    ],
+    [
+      "meaning",
+      0
+    ],
+    [
+      "declared_budget",
+      0
+    ],
+    [
+      "cross_zone",
+      0
+    ],
+    [
+      "rate",
+      0
+    ],
+    [
+      "trim",
+      0
+    ],
+    [
+      "pause",
+      0
+    ],
+    [
+      "diff_from_prev",
+      0
+    ]
+  ],
+  "format": 1,
+  "intent": {
+    "max": 8537760000,
+    "min": 6985440000,
+    "target": 7761600000,
+    "within": true
+  },
+  "not_applied": [
+    "music:S2.b1",
+    "music:S2.b2",
+    "override:ov1",
+    "override:ov2",
+    "rule:r:1",
+    "intent.must",
+    "pause.flex"
+  ],
+  "project_solver": "0.0.1",
+  "sections": {
+    "S1": {
+      "budget": null,
+      "budget_kind": "derived",
+      "natural": 1975680000,
+      "over": null
+    },
+    "S2": {
+      "budget": 5644800000,
+      "budget_kind": "declared",
+      "natural": 5503680000,
+      "over": -141120000
+    }
+  },
+  "solver": "naive-0",
+  "status": "ok",
+  "total": 7479360000,
+  "warnings": [
+    {
+      "beat": "S2.b1",
+      "code": "visual_shortfall",
+      "missing": 98784000,
+      "shot": "shot:B.2"
+    }
+  ]
+}

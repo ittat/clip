@@ -1,0 +1,35 @@
+name: ci
+on: [push, pull_request]
+
+jobs:
+  check:
+    # 三个平台跑同一套黄金用例：换台机器打开，工程不能变
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.85.0"
+          components: rustfmt, clippy
+      - run: cargo fmt --all --check
+      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - run: cargo test --workspace --locked
+      - run: cargo run -p clip --locked -- golden run --root golden
+
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.85.0"
+      - name: serde_json 不得开启 preserve_order
+        shell: bash
+        run: |
+          if cargo tree -e features -i serde_json | grep -q preserve_order; then
+            echo "serde_json 的 preserve_order 被某个依赖开启了，规范化输出会失去键排序"; exit 1
+          fi

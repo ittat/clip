@@ -1,0 +1,5 @@
+goal: 最小解说片：验证求解器的确定性
+duration: {target: 11s, tol: 10%}
+pace: normal
+must: ["n:S2.1.w1..w4"]   # 其实 / 这个 / 计划 / 从
+forbid: []

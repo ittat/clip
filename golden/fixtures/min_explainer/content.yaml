@@ -1,0 +1,19 @@
+beats:
+  S1.b1:
+    voice: {narration: "n:S1.1", fit: rigid}
+    visual:
+      - {shot: "shot:A.1", role: a-roll}
+    pause: {after: 0.4s, flex: 0.2s..0.8s}
+  S2.b1:
+    voice: {narration: "n:S2.1", fit: rigid}
+    visual:
+      - {shot: "shot:A.1", role: a-roll}
+      - {shot: "shot:B.2", role: b-roll, fit: fill, from: "n:S2.1.w5"}   # 从“一开始”切 B-roll
+    music: {cue: M1, fit: bars}
+    pause: {after: 0.4s, flex: 0.2s..0.8s}
+  S2.b2:
+    voice: {narration: "n:S2.2", fit: rigid}
+    visual:
+      - {shot: "shot:B.3", role: b-roll, fit: fill}
+    music: {cue: M1, fit: bars}
+    pause: {after: 0.6s, flex: 0.2s..1.0s}

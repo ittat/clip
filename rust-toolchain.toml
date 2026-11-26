@@ -1,0 +1,4 @@
+[toolchain]
+# 开工时改成当时的 stable 并锁死；升级工具链要单独一个 PR，并重跑全部黄金用例
+channel = "1.85.0"
+components = ["rustfmt", "clippy"]

@@ -1,0 +1,8 @@
+shots:
+  "shot:A.1": {src: media/a.mp4, in: 0s, out: 20s, desc: {景别: 中, 主体: 主持人, 动作: 讲述, 环境: 演播室}}
+  "shot:B.2": {src: media/b.mp4, in: 3s, out: 5.5s, desc: {景别: 远, 主体: 工厂, 动作: 静止, 环境: 黄昏}}
+  "shot:B.3": {src: media/b.mp4, in: 12s, out: 18s, desc: {景别: 近, 主体: 报表, 动作: 翻页, 环境: 办公室}}
+events:
+  "ev:B.2.1": {shot: "shot:B.2", at: 4.2s, kind: action_end}
+music:
+  M1: {src: media/m1.wav, bpm: 120, meter: 4, first_bar: 0s, bars: 16}
